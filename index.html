@@ -1107,7 +1107,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.03'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.04'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1156,7 +1156,7 @@ function dedupeAllKhatmas(){
 // ---- التحقق من وجود تحديث ----
 // ضع هنا رابط ملف version.json المستضاف (مثال: 'https://USER.github.io/khatma/version.json').
 // صيغة الملف: {"version":"2.04","url":"https://USER.github.io/khatma/"}. اتركه فارغًا لتعطيل التحقق.
-const UPDATE_CHECK_URL = '';
+const UPDATE_CHECK_URL = 'https://smartlamine-alt.github.io/Khatma/version.json';
 let updateInfo = null;
 function cmpVersion(a, b){
   const pa = String(a).split('.').map(n=>parseInt(n,10)||0);
@@ -1535,7 +1535,7 @@ function render(){
 
   const heroStatus = (()=>{
     if(editingLast && last) return `<span class="overdue-note">تعديل آخر تسجيل: ${SURAHS[last.surahIdx][0]} : ${nd(last.ayah)} — ${nd(last.date)}</span>`;
-    if(st.finished) return '';
+    if(st.finished || khatma.entries.length === 0) return '';
     const parts = [];
     if(st.overdue) parts.push(`<span class="overdue-note">${overdueLabel(st.dayIndex - st.duration)}</span>`);
     const pace = paceHizbLabel(st.hizbDiff);
@@ -1684,7 +1684,7 @@ function render(){
         <div class="bar-row">
           <div class="bar-label"><span>الوقت المنصرم من الختمة (اليوم ${vSt.overdue ? `<span class="overdue-count">${nd(vSt.dayIndex)}/${nd(vSt.duration)}</span>` : nd(Math.min(vSt.dayIndex, vSt.duration)) + ' من ' + nd(vSt.duration)})${vSt.overdue ? ` <span class="overdue-note">(${overdueLabel(vSt.dayIndex - vSt.duration)})</span>` : ''}</span><span${vSt.overdue ? ' class="overdue-note"' : ''}>${nd(timePctText)}٪</span></div>
           <div class="bar-track"><div class="bar-fill time${vSt.overdue ? ' overdue' : ''}" style="width:${timePct}%"></div></div>
-          ${!vSt.finished && paceHizbLabel(vSt.hizbDiff) ? `<div class="note" style="margin-top:6px;">الوتيرة اليوم: <span class="${vSt.hizbDiff>0?'ahead-note':'overdue-note'}">${paceHizbLabel(vSt.hizbDiff)}</span> (المعدل المطلوب: ${fmt1(60/vSt.duration)} حزب/يوم)</div>` : ''}
+          ${!vSt.finished && viewedKhatma.entries.length > 0 && paceHizbLabel(vSt.hizbDiff) ? `<div class="note" style="margin-top:6px;">الوتيرة اليوم: <span class="${vSt.hizbDiff>0?'ahead-note':'overdue-note'}">${paceHizbLabel(vSt.hizbDiff)}</span> (المعدل المطلوب: ${fmt1(60/vSt.duration)} حزب/يوم)</div>` : ''}
         </div>
 
       </div>
