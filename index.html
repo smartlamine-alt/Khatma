@@ -315,6 +315,8 @@
   .tag.onpace{ background: rgba(239,230,210,0.10); color: var(--parchment-dim); }
   .tag.done{ background: rgba(199,162,74,0.18); color: var(--gold); }
   .tag.pending{ background: rgba(239,230,210,0.10); color: var(--parchment-dim); }
+  .edit-khatma-btn, .relance-khatma-btn{ padding: 4px 8px; font-size: 13px; line-height:1; margin-inline-start: 4px; }
+  tr.khatma-edit-row td{ padding-top: 10px; padding-bottom: 10px; }
 
   section.settings{ padding: 12px 16px; margin-bottom: 12px; }
   section.settings h2{ display:none; }
@@ -345,7 +347,8 @@
   .backup-section .filelink-status{ padding: 4px 0; }
   h2{ margin-bottom: 10px; }
   .hero h2{ font-size: 17px; margin: 0; white-space: nowrap; }
-  .hero-head{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .hero-head{ display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap: wrap; }
+  .hero-khatma-select{ flex: 0 0 auto; width:auto; max-width: 100%; font-size: 12px; padding: 5px 6px; }
   .hero-status{ flex:1 1 0; min-width:0; font-size:11px; line-height:1.35; text-align:start; }
   .hero-status .overdue-note, .hero-status .ahead-note{ font-size:11px; }
   .hero-rate{ color: var(--parchment-dim); }
@@ -881,6 +884,9 @@ let showNewKhatmaForm = false;
 let selectedKhatmaIdx = null; // null = الختمة الحالية (الأحدث)
 let editingLast = false; // وضع تعديل آخر تسجيل
 let showKhatmaData = false; // الصفحة مضغوطة عند التحميل: يظهر فقط النسخ الاحتياطي وزر العرض
+let showKhatmaList = false; // قائمة الختمات مطوية افتراضيًا
+let editingKhatmaIdx = null; // فهرس الختمة الجاري تعديلها من القائمة، أو null
+let newKhatmaPrefill = null; // تعبئة أولية لنموذج "بدء ختمة جديدة" عند الإعادة (الرَّلانس)
 let dbCap = null; // db capability namespace, once resolved (null if unavailable)
 const DB_DOC_PATH = 'khatm/state';
 
@@ -900,8 +906,16 @@ async function getDbCapability(){
   return null;
 }
 
-function blankKhatma(startDate, durationDays){
-  return { startDate, durationDays, entries: [] };
+function blankKhatma(startDate, durationDays, description, riwaya){
+  return { startDate, durationDays, description: description || '', riwaya: riwaya || '', entries: [] };
+}
+function escHtml(t){
+  return String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// اسم الختمة: الوصف إن وُجد، وإلا خ١ خ٢ ... حسب ترتيبها.
+function khatmaName(k){
+  const d = (k.description || '').trim();
+  return d ? d : 'خ' + nd(state.khatmas.indexOf(k) + 1);
 }
 
 // ---- مجلد أو ملف مرتبط على القرص: يتحقق تلقائيًا من وجود ملف الحفظ أو ينشئه، ويحفظ في كل تحديث ----
@@ -1107,7 +1121,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.05'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.09'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1440,10 +1454,76 @@ function render(){
 
   const khatmaViewOptions = state.khatmas.map((k, i)=>{
     const isCurrent = i === state.khatmas.length - 1;
-    const label = dateDisplayInline(k.startDate) + ' — ' + nd(k.durationDays) + ' يوم' + (isCurrent ? ' (الحالية)' : '');
+    const label = escHtml(khatmaName(k)) + ' — ' + dateDisplayInline(k.startDate) + ' — ' + nd(k.durationDays) + ' يوم' + (isCurrent ? ' (الحالية)' : '');
     const value = isCurrent ? 'current' : String(i);
     const selected = (i === viewIdx) ? 'selected' : '';
     return `<option value="${value}" ${selected}>${label}</option>`;
+  }).join('');
+
+  const completedNameCounts = {};
+  state.khatmas.forEach((k)=>{
+    if(completedDaysTaken(k) !== null){
+      const nm = khatmaName(k);
+      completedNameCounts[nm] = (completedNameCounts[nm] || 0) + 1;
+    }
+  });
+
+  const khatmaListRows = state.khatmas.slice().reverse().map((k, ri)=>{
+    const i = state.khatmas.length - 1 - ri;
+    const isCurrent = i === state.khatmas.length - 1;
+    const kEnd = addDays(k.startDate, Math.max(k.durationDays, 1) - 1);
+    const kLast = lastEntry(k);
+    const kProgress = kLast ? kLast.cumulative : 0;
+    const kDays = completedDaysTaken(k);
+    const nm = khatmaName(k);
+    const timesCount = completedNameCounts[nm] || 0;
+    const timesLabel = timesCount > 1 ? ` <span class="sub-date" style="display:inline;">(×${nd(timesCount)})</span>` : '';
+
+    let statusHtml;
+    if(isCurrent){ statusHtml = `<span class="tag pending">جارية — ${fmt(kProgress)} / ${fmt(TOTAL_AYAT)}</span>`; }
+    else if(kDays !== null){ statusHtml = `<span class="tag done">مكتملة خلال ${nd(kDays)} يوم</span>`; }
+    else { statusHtml = `<span class="tag behind">ملغاة — ${fmt(kProgress)} / ${fmt(TOTAL_AYAT)}</span>`; }
+
+    if(editingKhatmaIdx === i){
+      return `<tr class="khatma-edit-row"><td colspan="4">
+        <div class="row">
+          <div class="field">
+            <label for="editKhatmaDesc_${i}">الاسم</label>
+            <input type="text" id="editKhatmaDesc_${i}" value="${escHtml(k.description || '')}" placeholder="خ${nd(i+1)}" maxlength="60">
+          </div>
+          <div class="field">
+            <label for="editKhatmaRiwaya_${i}">الرواية</label>
+            <input type="text" id="editKhatmaRiwaya_${i}" value="${escHtml(k.riwaya || '')}" list="riwayaList" maxlength="40">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="editKhatmaStart_${i}">تاريخ البدء</label>
+            ${state.calendarPref === 'hijri'
+              ? hijriSingleInputHtml('editKhatmaStart_'+i, k.startDate, false)
+              : `<input type="date" id="editKhatmaStart_${i}" value="${k.startDate}">`}
+          </div>
+          <div class="field">
+            <label for="editKhatmaDur_${i}">عدد الأيام</label>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" id="editKhatmaDur_${i}" value="${nd(k.durationDays)}">
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary edit-khatma-save" data-idx="${i}">حفظ</button>
+          <button class="ghost edit-khatma-cancel">إلغاء</button>
+        </div>
+      </td></tr>`;
+    }
+
+    return `<tr>
+      <td><b>${escHtml(nm)}</b>${timesLabel}${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}<span class="sub-date">${nd(k.startDate)} → ${nd(kEnd)}</span></td>
+      <td>${nd(k.durationDays)} يوم</td>
+      <td>${statusHtml}</td>
+      <td>
+        <button class="ghost edit-khatma-btn" data-idx="${i}" title="تعديل">✎</button>
+        ${(!isCurrent && kDays !== null) ? `<button class="ghost relance-khatma-btn" data-idx="${i}" title="إعادة">🔁</button>` : ''}
+      </td>
+    </tr>`;
   }).join('');
 
   let ledgerRows = '';
@@ -1502,7 +1582,7 @@ function render(){
         ? `<span class="tag done">اكتملت خلال ${nd(days)} يوم</span>`
         : `<span class="tag pending">${fmt(progress)} / ${fmt(TOTAL_AYAT)}</span>`;
       return `<tr>
-        <td>${nd(k.startDate)} → ${nd(endDate)}</td>
+        <td><b>${escHtml(khatmaName(k))}</b>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}<span class="sub-date">${nd(k.startDate)} → ${nd(endDate)}</span></td>
         <td>${nd(k.durationDays)} يوم</td>
         <td>${statusHtml}</td>
       </tr>`;
@@ -1581,7 +1661,11 @@ function render(){
     ` : ''}
 
     <section class="hero compact">
-      <div class="hero-head"><h2>تسجيل الموضع الحالي</h2><div class="hero-status">${heroStatus}</div></div>
+      <div class="hero-head">
+        <h2>تسجيل الموضع الحالي</h2>
+        <div class="hero-status">${heroStatus}</div>
+        ${state.khatmas.length > 1 ? `<select id="khatmaViewSelect" class="hero-khatma-select">${khatmaViewOptions}</select>` : ''}
+      </div>
       <div class="row hero-row">
         <div class="field">
           <label for="surahSel">السورة</label>
@@ -1607,7 +1691,7 @@ function render(){
       <div class="section-divider"></div>
 
       <div class="khatma-line">
-        <h2 class="inline-title">الختمة الحالية</h2>
+        <h2 class="inline-title">الختمة الحالية (${escHtml(khatmaName(khatma))})</h2>
         <div class="mf"><label>البداية</label>${dateTextCompact(khatma.startDate)}</div>
         <div class="mf"><label for="durationInput">عدد الأيام</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="durationInput" class="days-mini" value="${nd(khatma.durationDays)}"></div>
         <div class="mf"><label>النهاية</label>${khatma.durationDays > 0 ? dateTextCompact(endDate) : '<span class="date-text">—</span>'}</div>
@@ -1622,7 +1706,18 @@ function render(){
             </div>
             <div class="field">
               <label for="newDurationInput">عدد أيامها</label>
-              <input type="text" inputmode="numeric" pattern="[0-9]*" id="newDurationInput" value="${nd(khatma.durationDays)}">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" id="newDurationInput" value="${nd(newKhatmaPrefill ? newKhatmaPrefill.durationDays : 0)}">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="newDescInput">الوصف (اختياري)</label>
+              <input type="text" id="newDescInput" value="${escHtml(newKhatmaPrefill ? newKhatmaPrefill.description : '')}" placeholder="خ${nd(state.khatmas.length + 1)}" maxlength="60">
+            </div>
+            <div class="field">
+              <label for="newRiwayaInput">الرواية</label>
+              <input type="text" id="newRiwayaInput" list="riwayaList" value="${escHtml(newKhatmaPrefill ? newKhatmaPrefill.riwaya : (khatma.riwaya || ''))}" maxlength="40">
+              <datalist id="riwayaList"><option value="حفص عن عاصم"><option value="ورش عن نافع"><option value="قالون عن نافع"><option value="شعبة عن عاصم"><option value="الدوري عن أبي عمرو"></datalist>
             </div>
           </div>
           <div class="note">سيتم حفظ الختمة الحالية في السجل وبدء ختمة جديدة بهذه البيانات.</div>
@@ -1632,6 +1727,16 @@ function render(){
           </div>
       </div>` : `<div class="actions mini">${last ? (editingLast ? `<button class="ghost" id="cancelEditBtn">إلغاء التعديل</button>` : `<button class="ghost" id="editLastBtn">✎ تعديل آخر تسجيل</button>`) : ''}<button class="ghost" id="newKhatmaBtn">+ بدء ختمة جديدة</button></div>`}
     </section>
+
+    <button type="button" class="view-toggle" id="khatmaListToggleBtn" aria-expanded="${showKhatmaList}" aria-controls="khatmaListContent">
+      <span>عرض الختمات</span><span class="chev">▼</span>
+    </button>
+    <div id="khatmaListContent" ${showKhatmaList ? '' : 'hidden'}>
+      <section>
+        <h2>قائمة الختمات</h2>
+        <table><thead><tr><th>الفترة</th><th>المخطط</th><th>النتيجة</th><th></th></tr></thead><tbody>${khatmaListRows}</tbody></table>
+      </section>
+    </div>
 
     <button type="button" class="view-toggle" id="viewToggleBtn" aria-expanded="${showKhatmaData}" aria-controls="mainContent">
       <span>عرض بيانات ختمة</span><span class="chev">▼</span>
@@ -1667,14 +1772,7 @@ function render(){
     </section>
 
     <section>
-      <div class="khatma-view-picker">
-        <span class="k">اختيار الختمة</span>
-        <select id="khatmaViewSelect">${khatmaViewOptions}</select>
-      </div>
-
-      <div class="section-divider"></div>
-
-      <h2>سجل ختمة : ${dateDisplayInline(viewedKhatma.startDate)}</h2>
+      <h2>سجل ${escHtml(khatmaName(viewedKhatma))}${viewedKhatma.riwaya ? ' (' + escHtml(viewedKhatma.riwaya) + ')' : ''} : ${dateDisplayInline(viewedKhatma.startDate)}</h2>
       ${ledgerRows}
 
       <div class="section-divider"></div>
@@ -1780,6 +1878,12 @@ function render(){
     render();
   });
 
+  document.getElementById('khatmaListToggleBtn').addEventListener('click', ()=>{
+    showKhatmaList = !showKhatmaList;
+    if(!showKhatmaList){ editingKhatmaIdx = null; }
+    render();
+  });
+
   document.getElementById('surahSel').value = selectedSurah;
 
   document.querySelectorAll('.hijri-cal-btn').forEach(btn=>{
@@ -1793,7 +1897,7 @@ function render(){
 
   document.getElementById('durationInput').addEventListener('change', async (e)=>{
     let dur = parseInt(normalizeDigits(e.target.value), 10);
-    if(!dur || dur < 1) dur = khatma.durationDays;
+    if(isNaN(dur) || dur < 0) dur = khatma.durationDays;
     khatma.durationDays = dur;
     await saveState();
     render();
@@ -1803,9 +1907,12 @@ function render(){
     document.getElementById('confirmNewKhatmaBtn').addEventListener('click', async ()=>{
       const newStart = state.calendarPref === 'hijri' ? readHijriSingleIso('newStart') : (document.getElementById('newStartInput').value || todayStr());
       let newDur = parseInt(normalizeDigits(document.getElementById('newDurationInput').value), 10);
-      if(!newDur || newDur < 1) newDur = khatma.durationDays;
-      state.khatmas.push(blankKhatma(newStart, newDur));
+      if(isNaN(newDur) || newDur < 0) newDur = 0;
+      const newDesc = document.getElementById('newDescInput').value.trim();
+      const newRiwaya = document.getElementById('newRiwayaInput').value.trim();
+      state.khatmas.push(blankKhatma(newStart, newDur, newDesc, newRiwaya));
       showNewKhatmaForm = false;
+      newKhatmaPrefill = null;
       editingLast = false;
       selectedKhatmaIdx = null;
       await saveState();
@@ -1813,6 +1920,7 @@ function render(){
     });
     document.getElementById('cancelNewKhatmaBtn').addEventListener('click', ()=>{
       showNewKhatmaForm = false;
+      newKhatmaPrefill = null;
       render();
     });
   } else {
@@ -1821,10 +1929,54 @@ function render(){
         const ok = confirm('لم تُكمل الختمة الحالية بعد (' + fmt(st.progress) + ' / ' + fmt(TOTAL_AYAT) + ' آية). هل تريد المتابعة وبدء ختمة جديدة رغم ذلك؟');
         if(!ok) return;
       }
+      newKhatmaPrefill = null;
       showNewKhatmaForm = true;
       render();
     });
   }
+
+  document.querySelectorAll('.edit-khatma-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      editingKhatmaIdx = parseInt(btn.dataset.idx, 10);
+      showKhatmaList = true;
+      render();
+    });
+  });
+  document.querySelectorAll('.edit-khatma-cancel').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      editingKhatmaIdx = null;
+      render();
+    });
+  });
+  document.querySelectorAll('.edit-khatma-save').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const i = parseInt(btn.dataset.idx, 10);
+      const k = state.khatmas[i];
+      const newDesc = document.getElementById('editKhatmaDesc_'+i).value.trim();
+      const newRiwaya = document.getElementById('editKhatmaRiwaya_'+i).value.trim();
+      const newStart = state.calendarPref === 'hijri'
+        ? readHijriSingleIso('editKhatmaStart_'+i)
+        : (document.getElementById('editKhatmaStart_'+i).value || k.startDate);
+      let newDur = parseInt(normalizeDigits(document.getElementById('editKhatmaDur_'+i).value), 10);
+      if(isNaN(newDur) || newDur < 1) newDur = k.durationDays;
+      k.description = newDesc;
+      k.riwaya = newRiwaya;
+      k.startDate = newStart;
+      k.durationDays = newDur;
+      editingKhatmaIdx = null;
+      await saveState();
+      render();
+    });
+  });
+  document.querySelectorAll('.relance-khatma-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = parseInt(btn.dataset.idx, 10);
+      const k = state.khatmas[i];
+      newKhatmaPrefill = { description: khatmaName(k), riwaya: k.riwaya || '', durationDays: k.durationDays };
+      showNewKhatmaForm = true;
+      render();
+    });
+  });
 
   document.getElementById('saveBtn').addEventListener('click', async ()=>{
     const surahIdx = parseInt(document.getElementById('surahSel').value, 10);
