@@ -21,6 +21,7 @@
     --hairline: rgba(239,230,210,0.14);
     --bg-a:#1F3F30;
     --bg-b:#132821;
+    --over-yellow:#F2D23C;
   }
   :root[data-theme="midnight"]{
     --ink:#0F1B2D;
@@ -63,6 +64,7 @@
     --hairline: rgba(36,30,18,0.12);
     --bg-a:#FBF7EC;
     --bg-b:#F0E9D6;
+    --over-yellow:#B58900;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -167,6 +169,24 @@
   }
 
   .note.center{ text-align:center; }
+  h1.top-nav{ display:flex; gap:6px; align-items:center; }
+  .nav-btn{ font-family:'Amiri', serif; font-size:19px; font-weight:700; line-height:1.1; padding:4px 12px; border-radius:9px; background:transparent; color:var(--parchment-dim); border:1px solid var(--hairline); }
+  .nav-btn.active{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
+  #app > [hidden]{ display:none !important; }
+  .perm-dim{ opacity:.3; filter:grayscale(1); pointer-events:none; user-select:none; }
+  .perm-banner{ position:sticky; top:8px; z-index:5; box-shadow:0 4px 18px rgba(0,0,0,.4); }
+  table.khatma-list{ font-size:12px; }
+  table.khatma-list th{ padding:0 3px 6px; font-size:11.5px; white-space:nowrap; }
+  table.khatma-list td{ padding:5px 3px; white-space:nowrap; line-height:1.3; }
+  table.khatma-list .date-text{ display:inline; padding:0; font-size:12px; }
+  table.khatma-list .sub-date{ display:inline; font-size:11px; }
+  table.khatma-list .tag{ font-size:11px; padding:1px 7px; }
+  table.khatma-list button.ghost{ padding:2px 6px; font-size:12px; border-radius:6px; margin:0; }
+  .old-round .date-text{ display:inline; padding:0; font-size:12.5px; }
+  .khatma-group-row td{ padding-top:14px; font-size:15px; border-bottom:1px solid var(--hairline); }
+  .old-round{ display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; color:var(--parchment-dim); }
+  .old-round button{ padding:2px 10px; font-size:14px; }
+  .ledger-table tr.over-quota td{ color: var(--over-yellow); }
 
   .bars{ margin-top: 24px; text-align: start; }
   .bar-row{ margin-bottom: 12px; }
@@ -293,6 +313,8 @@
   table.ledger-table th:last-child, table.ledger-table td:last-child{ padding-inline-end: 0; }
   table.ledger-table td[rowspan]{ vertical-align: middle; border-inline-end: 1px dashed var(--hairline); white-space: nowrap; min-width: 84px; padding-inline-end: 6px; }
   table.ledger-table td[rowspan] .sub-date{ white-space: nowrap; }
+  table.ledger-table .hizb-col{ padding-inline-start: 3px; padding-inline-end: 3px; }
+  table.ledger-table th small{ font-size: 10px; font-weight: 400; opacity: .8; }
   table.ledger-table .time-col{ width: 1%; white-space: nowrap; padding-inline-end: 3px; padding-inline-start: 3px; direction: ltr; text-align: center; color: var(--parchment-dim); }
   .entry-time{ display:block; font-size: 10.5px; color: var(--parchment-dim); direction: ltr; }
   .entry-time-inline{ font-size: 10.5px; color: var(--parchment-dim); direction: ltr; }
@@ -427,6 +449,7 @@
     .header-cluster{ gap: 4px; }
     .app-logo{ width: 22px; height: 22px; }
     h1{ font-size: 20px; }
+    .nav-btn{ font-size:15px; padding:3px 8px; }
     .version-tag{ font-size: 9.5px; }
     .credit-line{ font-size: 8.5px; }
   }
@@ -902,10 +925,13 @@ function dateTextCompact(iso){
 
 let state = null;
 let showNewKhatmaForm = false;
+let currentView = 'khatma'; // 'khatma' | 'library'
+let expandedRounds = new Set(); // فهارس الدورات السابقة المفتوحة في السجل
 let selectedKhatmaIdx = null; // null = الختمة الحالية (الأحدث)
 let editingLast = false; // وضع تعديل آخر تسجيل
 let showKhatmaData = false; // الصفحة مضغوطة عند التحميل: يظهر فقط النسخ الاحتياطي وزر العرض
 let showKhatmaList = false; // قائمة الختمات مطوية افتراضيًا
+let showSettings = false; // الإعدادات مطوية افتراضيًا
 let editingKhatmaIdx = null; // فهرس الختمة الجاري تعديلها من القائمة، أو null
 let newKhatmaPrefill = null; // تعبئة أولية لنموذج "بدء ختمة جديدة" عند الإعادة (الرَّلانس)
 let showArchivedKhatmas = false; // الختمات المؤرشفة مخفية افتراضيًا عن القائمة
@@ -950,6 +976,8 @@ const FS_FILE_NAME = 'khatm-data.json';
 let dirHandle = null;
 let fileHandle = null;
 let linkMode = null; // 'file' | 'folder' | null
+let fileSyncInfo = null; // { ok, time } — حالة آخر حفظ في ملف JSON المرتبط
+function syncTimeStr(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 // 'unsupported' | 'not-linked' | 'needs-permission' | 'linked'
 let fileLinkStatus = 'unsupported';
 
@@ -1031,7 +1059,6 @@ function googleConfigured(){
   return typeof GOOGLE_CLIENT_ID === 'string' && GOOGLE_CLIENT_ID.indexOf('YOUR_CLIENT_ID') !== 0;
 }
 
-// يهيّئ عميل التوكن عند توفر مكتبة Google (قد لا تتوفر إن حُجب النطاق accounts.google.com، كما هو الحال داخل معاينة Claude).
 function initGoogleAuthIfAvailable(){
   if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2 || !googleConfigured()){
     driveStatus = 'unavailable';
@@ -1049,7 +1076,6 @@ function initGoogleAuthIfAvailable(){
       }
     });
     driveStatus = 'not-signed-in';
-    // محاولة صامتة: إن كانت هناك موافقة سابقة سارية، يُمنح التوكن دون واجهة اختيار حساب.
     googleTokenClient.requestAccessToken({ prompt: '' });
   }catch(e){
     driveStatus = 'unavailable';
@@ -1080,7 +1106,6 @@ async function driveApiFetch(url, options={}){
   return res;
 }
 
-// بعد الحصول على توكن: نبحث عن ملف الحفظ في Drive، أو ننشئه أول مرة، ثم نحمّله كمصدر أساسي للبيانات.
 async function afterGoogleSignIn(){
   driveStatus = 'signed-in';
   try{
@@ -1180,7 +1205,7 @@ async function loadFromFileHandle(){
     const text = await file.text();
     if(text && text.trim()){
       const migrated = migrateIfNeeded(JSON.parse(text));
-      if(migrated){ state = migrated; }
+      if(migrated){ state = migrated; fileSyncInfo = { ok:true, time: syncTimeStr() }; }
       // إن كان الملف بإصدار أحدث (versionWarning مُفعَّل)، لا نلمس state ولا نكتب فوقه.
     } else {
       await writeToFileHandle();
@@ -1194,7 +1219,8 @@ async function writeToFileHandle(){
     const writable = await fileHandle.createWritable();
     await writable.write(JSON.stringify(state, null, 2));
     await writable.close();
-  }catch(e){ console.error('تعذر الحفظ في الملف المرتبط', e); }
+    fileSyncInfo = { ok:true, time: syncTimeStr() };
+  }catch(e){ fileSyncInfo = { ok:false, time: syncTimeStr() }; console.error('تعذر الحفظ في الملف المرتبط', e); }
 }
 
 // نقرة واحدة فقط: اختيار مجلد، ثم كل شيء بعدها تلقائي (تحقق من الملف/إنشاؤه/تحميله/تحديثه) دون أي طلب إضافي.
@@ -1261,7 +1287,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.13'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.32'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1433,9 +1459,6 @@ async function loadState(){
   if(changed1 || changed2){ await saveState(); }
   }
   render();
-
-  // محاولة تسجيل دخول صامت إلى Google (إن كانت المكتبة متاحة والموافقة سارية سابقًا)؛
-  // ينجح فقط عند نشر الصفحة على نطاقك الفعلي المُدرَج في Authorized JavaScript origins.
   initGoogleAuthIfAvailable();
 }
 
@@ -1521,7 +1544,7 @@ function overdueLabel(days){
   return 'ختم القرآن متأخر ب' + nd(days) + ' أيام';
 }
 
-// وتيرة القراءة اليوم مقارنة بالمعدل المطلوب (60 حزبًا ÷ عدد أيام الختمة)، معبَّرًا عنها بالأحزاب.
+// وتيرة القراءة اليوم مقارنة بالمقدار اليومي (60 حزبًا ÷ عدد أيام الختمة)، معبَّرًا عنها بالأحزاب.
 function paceHizbLabel(hizbDiff){
   const n = Math.round(Math.abs(hizbDiff));
   if(n === 0) return null;
@@ -1601,31 +1624,48 @@ function renderVersionBlock(){
   }
 }
 
+// قسم «مكتبتي»: هيكل مستقل عن الختمة (المنطق يُضاف لاحقًا).
+function libraryViewHtml(){
+  return `<section id="libraryView"><h2>مكتبتي</h2><div class="note">قسم مستقل عن الختمة — سيُضاف نموذجه ومنطقه لاحقًا.</div></section>`;
+}
+
 function render(){
   if(versionWarning){ renderVersionBlock(); return; }
   const app = document.getElementById('app');
-  const khatma = currentKhatma();
+
+  const viewIdx = (selectedKhatmaIdx === null || selectedKhatmaIdx < 0 || selectedKhatmaIdx >= state.khatmas.length)
+    ? state.khatmas.length - 1 : selectedKhatmaIdx;
+  const viewedKhatma = state.khatmas[viewIdx];
+
+  const khatma = viewedKhatma; // بطاقة "تسجيل الموضع الحالي" و"الختمة الحالية" تعكسان الختمة المختارة من القائمة
   const st = computeStatus(khatma);
   const sCls = statusClass(st.diffDays);
   const last = lastEntry(khatma);
   const history = historyKhatmas();
 
-  const viewIdx = (selectedKhatmaIdx === null || selectedKhatmaIdx < 0 || selectedKhatmaIdx >= state.khatmas.length)
-    ? state.khatmas.length - 1 : selectedKhatmaIdx;
-  const viewedKhatma = state.khatmas[viewIdx];
-  const vSt = computeStatus(viewedKhatma);
-  const vSCls = statusClass(vSt.diffDays);
+  const vSt = st;
+  const vSCls = sCls;
 
   const completedCount = history.filter(k => completedDaysTaken(k) !== null).length
-    + (st.finished ? 1 : 0) + (state.legacyCompletedCount || 0);
+    + (computeStatus(currentKhatma()).finished ? 1 : 0) + (state.legacyCompletedCount || 0);
 
-  const khatmaViewOptions = state.khatmas.map((k, i)=>{
-    const isCurrent = i === state.khatmas.length - 1;
-    const label = escHtml(khatmaName(k)) + ' — ' + dateDisplayInline(k.startDate) + ' — ' + nd(k.durationDays) + ' يوم' + (isCurrent ? ' (الحالية)' : '');
-    const value = isCurrent ? 'current' : String(i);
-    const selected = (i === viewIdx) ? 'selected' : '';
-    return { i, html: `<option value="${value}" ${selected}>${label}</option>` };
-  }).filter(o => !state.khatmas[o.i].archived || o.i === viewIdx).map(o=>o.html).join('');
+  const khatmaGroups = [];
+  state.khatmas.forEach((k, i)=>{
+    const nm = khatmaName(k);
+    let g = khatmaGroups.find(x => x.name === nm);
+    if(!g){ g = { name: nm, idxs: [] }; khatmaGroups.push(g); }
+    g.idxs.push(i);
+  });
+  const viewName = khatmaName(viewedKhatma);
+  const khatmaViewOptions = khatmaGroups
+    .filter(g => g.name === viewName || g.idxs.some(i => !state.khatmas[i].archived))
+    .map(g => {
+      const li = g.idxs[g.idxs.length - 1];
+      const k = state.khatmas[li];
+      const isCurrent = li === state.khatmas.length - 1;
+      const label = escHtml(g.name) + (g.idxs.length > 1 ? ' ×' + nd(g.idxs.length) : '') + ' — ' + dateDisplayInline(k.startDate) + ' — ' + nd(k.durationDays) + ' يوم' + (isCurrent ? ' (الحالية)' : '');
+      return `<option value="${isCurrent ? 'current' : String(li)}" ${g.name === viewName ? 'selected' : ''}>${label}</option>`;
+    }).join('');
 
   const completedNameCounts = {};
   state.khatmas.forEach((k)=>{
@@ -1638,7 +1678,7 @@ function render(){
   const archivedCount = state.khatmas.filter(k=>k.archived).length;
   const visibleKhatmas = state.khatmas.filter(k => showArchivedKhatmas || !k.archived);
 
-  const khatmaListRows = visibleKhatmas.slice().reverse().map((k)=>{
+  const roundRowFn = (k)=>{
     const i = state.khatmas.indexOf(k);
     const isCurrent = i === state.khatmas.length - 1;
     const kEnd = addDays(k.startDate, Math.max(k.durationDays, 1) - 1);
@@ -1665,7 +1705,7 @@ function render(){
       return `<tr class="khatma-edit-row"><td colspan="4">
         <div class="row">
           <div class="field">
-            <label for="editKhatmaDesc_${i}">الاسم</label>
+            <label for="editKhatmaDesc_${i}">الاسم <small>(يشمل كل دورات هذه الختمة)</small></label>
             <input type="text" id="editKhatmaDesc_${i}" value="${escHtml(k.description || '')}" placeholder="خ${nd(i+1)}" maxlength="60">
           </div>
           <div class="field">
@@ -1694,7 +1734,7 @@ function render(){
 
     if(k.archived){
       return `<tr class="archived-row">
-        <td><b>${escHtml(nm)}</b>${timesLabel}${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}<span class="sub-date">${nd(k.startDate)} → ${nd(kEnd)}</span></td>
+        <td><span class="round-dates">${dateTextCompact(k.startDate)} → ${dateTextCompact(kEnd)}</span>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}</td>
         <td>${nd(k.durationDays)} يوم</td>
         <td>${statusHtml}</td>
         <td>
@@ -1705,7 +1745,7 @@ function render(){
     }
 
     return `<tr>
-      <td><b>${escHtml(nm)}</b>${timesLabel}${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}<span class="sub-date">${nd(k.startDate)} → ${nd(kEnd)}</span></td>
+      <td><span class="round-dates">${dateTextCompact(k.startDate)} → ${dateTextCompact(kEnd)}</span>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}</td>
       <td>${nd(k.durationDays)} يوم</td>
       <td>${statusHtml}</td>
       <td>
@@ -1721,13 +1761,31 @@ function render(){
         <button class="ghost delete-khatma-btn" data-idx="${i}" title="حذف نهائي">🗑</button>
       </td>
     </tr>`;
-  }).join('');
+  };
+  const listGroups = [];
+  visibleKhatmas.slice().reverse().forEach(k => {
+    const nm = khatmaName(k);
+    let g = listGroups.find(x => x.nm === nm);
+    if(!g){ g = { nm, ks: [] }; listGroups.push(g); }
+    g.ks.push(k);
+  });
+  const khatmaListRows = listGroups.map(g =>
+    `<tr class="khatma-group-row"><td colspan="4"><b>${escHtml(g.nm)}</b></td></tr>` + g.ks.map(roundRowFn).join('')
+  ).join('');
 
-  let ledgerRows = '';
-  if(viewedKhatma.entries.length === 0){
-    ledgerRows = `<div class="ledger-empty">لم تُسجَّل أي قراءة بعد في هذه الختمة. سجّل موضعك الحالي لتبدأ الحساب.</div>`;
+  const ledgerTableHtml = (vk) => {
+  if(vk.entries.length === 0){
+    return `<div class="ledger-empty">لم تُسجَّل أي قراءة بعد في هذه الختمة. سجّل موضعك الحالي لتبدأ الحساب.</div>`;
   } else {
-    const reversedEntries = viewedKhatma.entries.slice().reverse();
+    const reversedEntries = vk.entries.slice().reverse();
+    const baseHizbByDate = {};
+    { let lastDate = null, lastHizb = null;
+      for(const e of vk.entries){
+        if(e.date !== lastDate){ baseHizbByDate[e.date] = lastHizb; lastDate = e.date; }
+        lastHizb = unitPosition(HIZB_BOUNDARIES, e.cumulative);
+      }
+    }
+    const dailyHizbQuota = vk.durationDays > 0 ? 60/vk.durationDays : 0;
     const groups = [];
     for(const e of reversedEntries){
       if(groups.length && groups[groups.length-1].date === e.date){
@@ -1738,9 +1796,9 @@ function render(){
     }
     const rows = groups.map(g => {
       return g.items.map((e, idx)=>{
-        const dIdx = Math.min(Math.max(daysBetween(viewedKhatma.startDate, e.date)+1,1), 9999);
+        const dIdx = Math.min(Math.max(daysBetween(vk.startDate, e.date)+1,1), 9999);
         const eHizb = unitPosition(HIZB_BOUNDARIES, e.cumulative);
-        const hizbPerDayE = viewedKhatma.durationDays > 0 ? 60/viewedKhatma.durationDays : 0;
+        const hizbPerDayE = vk.durationDays > 0 ? 60/vk.durationDays : 0;
         const idealHizbE = Math.min(hizbPerDayE*dIdx, 60);
         const dHizb = eHizb - idealHizbE;
         const cls = statusClass(hizbPerDayE > 0 ? dHizb/hizbPerDayE : 0);
@@ -1748,23 +1806,38 @@ function render(){
         const ePages = e.cumulative * APPROX_PAGES / TOTAL_AYAT;
         const eJuz = unitPosition(JUZ_BOUNDARIES, e.cumulative);
         const dateCell = idx===0 ? `<td rowspan="${g.items.length}">${dateDisplayLedger(g.date)}</td>` : '';
-        return `<tr>${dateCell}
+        const r1 = x => Math.round(x*10)/10;
+        const dailyCum = baseHizbByDate[e.date] == null ? null : r1(r1(eHizb) - r1(baseHizbByDate[e.date]));
+        const overQuota = dailyHizbQuota > 0 && dailyCum !== null && dailyCum > dailyHizbQuota + 0.05;
+        return `<tr${overQuota ? ' class="over-quota"' : ''}>${dateCell}
         <td class="time-col">${e.time ? nd(e.time) : '—'}</td>
+        <td class="hizb-col">${fmtSmart(eHizb)} / ${fmtSmart(idealHizbE)}</td>
+        <td class="hizb-col">${dailyCum === null ? '—' : fmtSmart(dailyCum)}</td>
         <td>${SURAHS[e.surahIdx][0]} : ${nd(e.ayah)}</td>
         <td>${fmtSmart(eJuz)}</td>
-        <td>${fmtSmart(eHizb)} / ${fmtSmart(idealHizbE)}</td>
         <td>${fmt(e.cumulative)} / ${fmt(TOTAL_AYAT)}</td>
         <td>${fmt(ePages)} / ${fmt(APPROX_PAGES)}</td>
         <td><span class="tag ${cls}">${label}</span></td>
       </tr>`;
       }).join('');
     }).join('');
-    ledgerRows = `<div class="table-scroll"><table class="ledger-table">
-      <thead><tr><th>التاريخ</th><th class="time-col">الوقت</th><th>الموضع الحالي</th><th>الأجزاء</th><th>الأحزاب (المقروء/المطلوب)</th><th>الآيات</th><th>الصفحات</th><th>الحالة</th></tr></thead>
+    return `<div class="table-scroll"><table class="ledger-table">
+      <thead><tr><th>التاريخ</th><th class="time-col">الوقت</th><th class="hizb-col">الأحزاب<br><small>(المقروء/المطلوب)</small></th><th class="hizb-col">التراكم<br><small>اليومي</small></th><th>الموضع الحالي</th><th>الأجزاء</th><th>الآيات</th><th>الصفحات</th><th>الحالة</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
 
+  };
+  const olderRounds = state.khatmas.map((k, i) => ({ k, i })).filter(o => o.i < viewIdx && khatmaName(o.k) === viewName);
+  const olderRoundsHtml = olderRounds.slice().reverse().map(o => {
+    const d = completedDaysTaken(o.k);
+    const le = lastEntry(o.k);
+    const stTag = d !== null ? `<span class="tag done">مكتملة خلال ${nd(d)} يوم</span>`
+      : (o.k.status === 'cancelled' ? `<span class="tag behind">ملغاة</span>` : `<span class="tag pending">${fmt(le ? le.cumulative : 0)} / ${fmt(TOTAL_AYAT)}</span>`);
+    const open = expandedRounds.has(o.i);
+    return `<div class="old-round"><button type="button" class="ghost round-toggle" data-idx="${o.i}" aria-expanded="${open}">${open ? '−' : '+'}</button><span>${dateTextCompact(o.k.startDate)}${o.k.riwaya ? ' (' + escHtml(o.k.riwaya) + ')' : ''}</span>${stTag}</div>${open ? ledgerTableHtml(o.k) : ''}`;
+  }).join('');
+  const ledgerRows = ledgerTableHtml(viewedKhatma) + olderRoundsHtml;
 
   let historyRows = '';
   if(history.length === 0){
@@ -1790,9 +1863,12 @@ function render(){
     </table>`;
   }
 
-  const surahOptions = SURAHS.map((s,i)=>`<option value="${i}">${nd(i+1)}. ${s[0]} (${nd(s[1])} آية)</option>`).join('');
-  const selectedSurah = last ? last.surahIdx : 0;
-  const selectedAyah = last ? last.ayah : '';
+  const lastIsFinal = (!!last && last.cumulative >= TOTAL_AYAT && !editingLast) || showNewKhatmaForm; // ختمة مكتملة أو جديدة/إعادة ← البدء من الفاتحة
+  const selectedSurah = (last && !lastIsFinal) ? last.surahIdx : 0;
+  const selectedAyah = (last && !lastIsFinal) ? last.ayah : '';
+  // السورة الحالية أولًا في القائمة، ثم التي بعدها بالترتيب (دائريًا).
+  const surahOptions = SURAHS.map((s,i)=>i).sort((a,b)=> ((a - selectedSurah + SURAHS.length) % SURAHS.length) - ((b - selectedSurah + SURAHS.length) % SURAHS.length))
+    .map(i=>`<option value="${i}">${nd(i+1)}. ${SURAHS[i][0]} (${nd(SURAHS[i][1])} آية)</option>`).join('');
   const endDate = addDays(khatma.startDate, khatma.durationDays - 1);
 
   const pagesRead = vSt.progress * APPROX_PAGES / TOTAL_AYAT;
@@ -1817,8 +1893,8 @@ function render(){
     if(st.overdue) parts.push(`<span class="overdue-note">${overdueLabel(st.dayIndex - st.duration)}</span>`);
     const pace = paceHizbLabel(st.hizbDiff);
     parts.push(pace
-      ? `<span class="${st.hizbDiff>0?'ahead-note':'overdue-note'}">${pace}</span> <span class="hero-rate">(المعدل المطلوب: ${fmt1(60/st.duration)} حزب/يوم)</span>`
-      : `<span class="hero-rate">في الموعد (المعدل المطلوب: ${fmt1(60/st.duration)} حزب/يوم)</span>`);
+      ? `<span class="${st.hizbDiff>0?'ahead-note':'overdue-note'}">${pace}</span> <span class="hero-rate">(المقدار اليومي: ${fmt1(60/st.duration)} حزب/يوم)</span>`
+      : `<span class="hero-rate">في الموعد (المقدار اليومي: ${fmt1(60/st.duration)} حزب/يوم)</span>`);
     return parts.join(' - ');
   })();
 
@@ -1827,13 +1903,46 @@ function render(){
       <div class="header-row">
         <div class="header-cluster">
           <img src="${LOGO_DATA_URI}" alt="شعار ختمتي" class="app-logo">
-          <h1>ختمتي</h1>
+          <h1 class="top-nav"><button type="button" class="nav-btn ${currentView === 'khatma' ? 'active' : ''}" id="navKhatmaBtn">ختمتي</button><button type="button" class="nav-btn ${currentView === 'library' ? 'active' : ''}" id="navLibraryBtn">مكتبتي</button></h1>
           <span class="version-tag">v${APP_VERSION}</span>
         </div>
         <div class="credit-line">فكرة وتصميم: شرشالي محمد أمين<br>برنامج مجاني غير ربحي</div>
       </div>
       <div class="sub">${showKhatmaData && completedCount>0 ? `<span class="completed-badge">✓ أتممت ${nd(completedCount)} ${completedCount===1?'ختمة':'ختمات'}</span>`:''}</div>
     </header>
+
+    <button type="button" class="view-toggle" id="settingsToggleBtn" aria-expanded="${showSettings}" aria-controls="settingsContent">
+      <span>⚙ الإعدادات</span><span class="chev">▼</span>
+    </button>
+    <div id="settingsContent" ${showSettings ? '' : 'hidden'}>
+      <section class="settings">
+        <div class="settings-row">
+          <div class="settings-field">
+            <span class="k">شكل الأرقام</span>
+            <select id="numeralSelect">
+              <option value="western" ${state.numeralSystem==='western'?'selected':''}>عربية (0,1,2)</option>
+              <option value="hindi" ${state.numeralSystem==='hindi'?'selected':''}>هندية (٠,١,٢)</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <span class="k">المظهر</span>
+            <select id="themeSelect">
+              <option value="emerald" ${state.theme==='emerald'?'selected':''}>زمردي</option>
+              <option value="midnight" ${state.theme==='midnight'?'selected':''}>ليلي أزرق</option>
+              <option value="sepia" ${state.theme==='sepia'?'selected':''}>تراثي بني</option>
+              <option value="ivory" ${state.theme==='ivory'?'selected':''}>فاتح عاجي</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <span class="k">التقويم الافتراضي</span>
+            <select id="calendarSelect">
+              <option value="hijri" ${state.calendarPref==='hijri'?'selected':''}>هجري (والميلادي أسفله)</option>
+              <option value="gregorian" ${state.calendarPref==='gregorian'?'selected':''}>ميلادي (والهجري أسفله)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+    </div>
 
     ${updateInfo ? `
       <section class="status-banner status-ahead" style="padding:8px 12px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px;">
@@ -1851,7 +1960,7 @@ function render(){
         </div>
       </section>
     ` : fileLinkStatus === 'needs-permission' ? `
-      <section class="status-banner status-behind" style="text-align:start; font-weight:500;">
+      <section class="status-banner status-behind perm-banner" style="text-align:start; font-weight:500;">
         <div style="margin-bottom:10px;">${linkMode === 'file' ? 'الملف المرتبط' : 'المجلد المرتبط'} يحتاج إذنًا جديدًا من المتصفح للمتابعة تلقائيًا.</div>
         <button class="primary" id="topGrantPermBtn">منح الإذن ومتابعة</button>
       </section>
@@ -1861,28 +1970,29 @@ function render(){
       <div class="hero-head">
         <h2>تسجيل الموضع الحالي</h2>
         <div class="hero-status">${heroStatus}</div>
-        ${state.khatmas.length > 1 ? `<select id="khatmaViewSelect" class="hero-khatma-select">${khatmaViewOptions}</select>` : ''}
+        ${khatmaGroups.length > 1 ? `<select id="khatmaViewSelect" class="hero-khatma-select">${khatmaViewOptions}</select>` : ''}
       </div>
       <div class="row hero-row">
         <div class="field">
           <label for="surahSel">السورة</label>
-          <select id="surahSel">${surahOptions}</select>
+          <select id="surahSel" ${showNewKhatmaForm ? 'disabled' : ''}>${surahOptions}</select>
         </div>
         <div class="field field-ayah">
           <label for="ayahInput">الآية</label>
-          <input type="text" inputmode="numeric" pattern="[0-9]*" id="ayahInput" value="${selectedAyah}" placeholder="رقم">
+          <input type="text" inputmode="numeric" pattern="[0-9]*" id="ayahInput" value="${selectedAyah}" placeholder="رقم" ${showNewKhatmaForm ? 'disabled' : ''}>
         </div>
         <div class="field field-date">
           <label for="entryDateInput">التاريخ</label>
           ${state.calendarPref === 'hijri'
-            ? hijriSingleInputHtml('entryDate', (editingLast && last) ? last.date : todayStr(), false, khatma.startDate, todayStr())
-            : `<input type="date" id="entryDateInput" value="${(editingLast && last) ? last.date : todayStr()}" min="${khatma.startDate}" max="${todayStr()}">`}
+            ? hijriSingleInputHtml('entryDate', (editingLast && last) ? last.date : todayStr(), showNewKhatmaForm, khatma.startDate, todayStr())
+            : `<input type="date" id="entryDateInput" value="${(editingLast && last) ? last.date : todayStr()}" min="${khatma.startDate}" max="${todayStr()}" ${showNewKhatmaForm ? 'disabled' : ''}>`}
         </div>
         <div class="field field-btn">
           <label>&nbsp;</label>
-          <button class="primary" id="saveBtn">${editingLast ? 'حفظ التعديل' : 'تحديث'}</button>
+          <button class="primary" id="saveBtn" ${showNewKhatmaForm ? 'disabled' : ''}>${editingLast ? 'حفظ التعديل' : 'تحديث'}</button>
         </div>
       </div>
+      ${showNewKhatmaForm ? `<div class="note">🔒 التسجيل معطّل حتى تُؤكّد الختمة الجديدة أو تُلغيها.</div>` : ''}
       ${showKhatmaData ? `<div class="note">التاريخ يكون اليوم افتراضيًا — غيّره فقط إن كنت تسجّل قراءة يوم سابق فاتك تسجيله، حتى تبقى الإحصائيات دقيقة.</div>` : ''}
 
       <div class="section-divider"></div>
@@ -1890,7 +2000,7 @@ function render(){
       <div class="khatma-line">
         <h2 class="inline-title">الختمة الحالية (${escHtml(khatmaName(khatma))})</h2>
         <div class="mf"><label>البداية</label>${dateTextCompact(khatma.startDate)}</div>
-        <div class="mf"><label for="durationInput">عدد الأيام</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="durationInput" class="days-mini" value="${nd(khatma.durationDays)}"></div>
+        <div class="mf"><label for="durationInput">عدد الأيام</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="durationInput" class="days-mini" value="${nd(khatma.durationDays)}" ${showNewKhatmaForm ? 'disabled' : ''}></div>
         <div class="mf"><label>النهاية</label>${khatma.durationDays > 0 ? dateTextCompact(endDate) : '<span class="date-text">—</span>'}</div>
       </div>
       ${showNewKhatmaForm ? `<div class="new-khatma-form">
@@ -1924,50 +2034,11 @@ function render(){
       </div>` : `<div class="actions mini">${last ? (editingLast ? `<button class="ghost" id="cancelEditBtn">إلغاء التعديل</button>` : `<button class="ghost" id="editLastBtn">✎ تعديل آخر تسجيل</button>`) : ''}<button class="ghost" id="newKhatmaBtn">+ بدء ختمة جديدة</button></div>`}
     </section>
 
-    <button type="button" class="view-toggle" id="khatmaListToggleBtn" aria-expanded="${showKhatmaList}" aria-controls="khatmaListContent">
-      <span>عرض الختمات</span><span class="chev">▼</span>
-    </button>
-    <div id="khatmaListContent" ${showKhatmaList ? '' : 'hidden'}>
-      <section>
-        <h2>قائمة الختمات</h2>
-        <table><thead><tr><th>الفترة</th><th>المخطط</th><th>النتيجة</th><th></th></tr></thead><tbody>${khatmaListRows}</tbody></table>
-        ${archivedCount > 0 ? `<div class="note" style="margin-top:10px;"><button type="button" class="ghost" id="toggleArchivedBtn" style="padding:4px 10px; font-size:12.5px;">${showArchivedKhatmas ? 'إخفاء المؤرشفة' : `عرض المؤرشفة (${nd(archivedCount)})`}</button></div>` : ''}
-      </section>
-    </div>
-
     <button type="button" class="view-toggle" id="viewToggleBtn" aria-expanded="${showKhatmaData}" aria-controls="mainContent">
-      <span>عرض بيانات ختمة</span><span class="chev">▼</span>
+      <span>عرض بيانات ختمة${state.khatmas.length > 1 ? ` : ${escHtml(khatmaName(viewedKhatma))}` : ''}</span><span class="chev">▼</span>
     </button>
 
     <div id="mainContent" ${showKhatmaData ? '' : 'hidden'}>
-    <section class="settings">
-      <div class="settings-row">
-        <div class="settings-field">
-          <span class="k">شكل الأرقام</span>
-          <select id="numeralSelect">
-            <option value="western" ${state.numeralSystem==='western'?'selected':''}>عربية (0,1,2)</option>
-            <option value="hindi" ${state.numeralSystem==='hindi'?'selected':''}>هندية (٠,١,٢)</option>
-          </select>
-        </div>
-        <div class="settings-field">
-          <span class="k">المظهر</span>
-          <select id="themeSelect">
-            <option value="emerald" ${state.theme==='emerald'?'selected':''}>زمردي</option>
-            <option value="midnight" ${state.theme==='midnight'?'selected':''}>ليلي أزرق</option>
-            <option value="sepia" ${state.theme==='sepia'?'selected':''}>تراثي بني</option>
-            <option value="ivory" ${state.theme==='ivory'?'selected':''}>فاتح عاجي</option>
-          </select>
-        </div>
-        <div class="settings-field">
-          <span class="k">التقويم الافتراضي</span>
-          <select id="calendarSelect">
-            <option value="hijri" ${state.calendarPref==='hijri'?'selected':''}>هجري (والميلادي أسفله)</option>
-            <option value="gregorian" ${state.calendarPref==='gregorian'?'selected':''}>ميلادي (والهجري أسفله)</option>
-          </select>
-        </div>
-      </div>
-    </section>
-
     <section>
       <h2>سجل ${escHtml(khatmaName(viewedKhatma))}${viewedKhatma.riwaya ? ' (' + escHtml(viewedKhatma.riwaya) + ')' : ''} : ${dateDisplayInline(viewedKhatma.startDate)}</h2>
       ${ledgerRows}
@@ -2000,17 +2071,17 @@ function render(){
       <div class="note">الصفحات تقريبية (حسب مصحف من ٦٠٤ صفحة)، وتقسيم الأحزاب تقريبي حسب عدد الآيات — قد يختلف يسيرًا عن الطبعة المطبوعة.</div>
     </section>
 
-    <section>
-      <h2>إحصائيات عامة</h2>
-      <div class="stats-summary">
-        <div class="stat"><span class="num">${nd(completedCount)}</span><span class="lbl">ختمات مكتملة</span></div>
-        <div class="stat"><span class="num">${avgDays!==null ? nd(Math.round(avgDays)) : '—'}</span><span class="lbl">متوسط الأيام للختمة</span></div>
-        <div class="stat"><span class="num">${nd(history.length)}</span><span class="lbl">ختمات سابقة مسجَّلة</span></div>
-      </div>
-      ${state.legacyCompletedCount ? `<div class="note">+ ${nd(state.legacyCompletedCount)} ختمة من نسخة قديمة غير مفصّلة بالتواريخ.</div>` : ''}
-      <h2 style="margin-top:18px; font-size:16px;">سجل الختمات السابقة</h2>
-      ${historyRows}
-    </section>
+    </div>
+
+    <button type="button" class="view-toggle" id="khatmaListToggleBtn" aria-expanded="${showKhatmaList}" aria-controls="khatmaListContent">
+      <span>عرض الختمات</span><span class="chev">▼</span>
+    </button>
+    <div id="khatmaListContent" ${showKhatmaList ? '' : 'hidden'}>
+      <section>
+        <h2>قائمة الختمات</h2>
+        <div class="table-scroll"><table class="khatma-list"><thead><tr><th>الفترة</th><th>المدة</th><th>الحالة</th><th></th></tr></thead><tbody>${khatmaListRows}</tbody></table></div>
+        ${archivedCount > 0 ? `<div class="note" style="margin-top:10px;"><button type="button" class="ghost" id="toggleArchivedBtn" style="padding:4px 10px; font-size:12.5px;">${showArchivedKhatmas ? 'إخفاء المؤرشفة' : `عرض المؤرشفة (${nd(archivedCount)})`}</button></div>` : ''}
+      </section>
     </div>
 
     <section class="backup-section">
@@ -2023,17 +2094,16 @@ function render(){
         <div class="filelink-status warn">تم تسجيل الدخول، لكن تعذّر الوصول إلى ملف الحفظ في Drive. حاول مجددًا.</div>
         <div class="actions"><button class="primary" id="googleSignInBtn">إعادة المحاولة</button><button class="ghost" id="googleSignOutBtn">تسجيل الخروج</button></div>
       ` : driveStatus === 'not-signed-in' ? `
-        <div class="filelink-status">اربط حساب Google Drive لمزامنة بياناتك تلقائيًا بين كل أجهزتك عبر الإنترنت (لا يتطلب تطبيقًا مثبَّتًا).</div>
+        <div class="filelink-status">اربط حساب Google Drive لمزامنة بياناتك تلقائيًا بين كل أجهزتك عبر الإنترنت.</div>
         <div class="actions"><button class="primary" id="googleSignInBtn">تسجيل الدخول عبر Google</button></div>
-      ` : `
-        <div class="note">مزامنة Google Drive غير متاحة هنا${googleConfigured() ? ' (تعذّر تحميل مكتبة Google — تحقّق من الاتصال)' : ' — يحتاج الأمر إعداد معرّف عميل Google الخاص بك في الكود، ولا يعمل داخل معاينة Claude لأسباب أمنية؛ سيعمل عند نشر الصفحة على نطاقك الفعلي (GitHub Pages مثلًا)'}.</div>
-      `}
-      <div class="section-divider"></div>
+      ` : ``}
+      ${driveStatus !== 'unavailable' ? `<div class="section-divider"></div>` : ''}
 
       ${fileLinkStatus === 'db' ? `
         <div class="filelink-status ok">✓ متصل بقاعدة بيانات حسابك على Claude — تُحفَظ بياناتك تلقائيًا وتتزامن على أي جهاز تفتح منه هذا الرابط وأنت مسجّل الدخول.</div>
       ` : fileLinkStatus === 'linked' ? `
-        <div class="filelink-status ok">✓ متصل بـ${linkMode === 'file' ? ' ملف مباشرة' : ' مجلد'} — يُحفَظ كل تحديث تلقائيًا في نفس ${linkMode === 'file' ? 'الملف الذي اخترته' : `ملف «${FS_FILE_NAME}» داخل المجلد`}.</div>
+        <div class="filelink-status ${fileSyncInfo && !fileSyncInfo.ok ? 'warn' : 'ok'}">${fileSyncInfo && !fileSyncInfo.ok ? '⚠ تعذّر تحديث ملف JSON (آخر محاولة ' + nd(fileSyncInfo.time) + ') — تحقق من صلاحية الوصول.' : '✓ ملف JSON محدَّث' + (fileSyncInfo ? ' — آخر حفظ ' + nd(fileSyncInfo.time) : ' — يُحفَظ كل تحديث تلقائيًا')}</div>
+        <div class="note" style="margin-top:4px;">📁 الموضع: ${linkMode === 'file' ? 'الملف «' + escHtml(fileHandle ? fileHandle.name : '') + '»' : 'المجلد «' + escHtml(dirHandle ? dirHandle.name : '') + '» ← «' + FS_FILE_NAME + '»'} (المتصفح لا يكشف المسار الكامل)</div>
         <div class="actions"><button class="ghost" id="unlinkBtn">إلغاء الربط</button></div>
       ` : fileLinkStatus === 'unsupported' ? `
         <div class="filelink-status">هذا المتصفح/الجهاز لا يدعم الربط المباشر بملف على القرص (متاح حاليًا على Chrome أو Edge على الحاسوب فقط). استخدم التنزيل والاستيراد اليدوي أدناه لنقل بياناتك.</div>
@@ -2066,6 +2136,17 @@ function render(){
   if(document.getElementById('linkFolderBtn2')){
     document.getElementById('linkFolderBtn2').addEventListener('click', linkFolder);
   }
+  if(currentView === 'library'){
+    [...app.children].forEach(c => { if(!c.matches('header.top')) c.hidden = true; });
+    app.insertAdjacentHTML('beforeend', libraryViewHtml());
+  }
+  document.getElementById('navKhatmaBtn').addEventListener('click', ()=>{ currentView = 'khatma'; render(); });
+  document.getElementById('navLibraryBtn').addEventListener('click', ()=>{ currentView = 'library'; render(); });
+  const permLocked = fileLinkStatus === 'needs-permission';
+  [...app.children].forEach(c => {
+    if(permLocked && !c.classList.contains('perm-banner')){ c.setAttribute('inert', ''); c.classList.add('perm-dim'); }
+    else { c.removeAttribute('inert'); c.classList.remove('perm-dim'); }
+  });
   if(fileLinkStatus === 'needs-permission' && document.getElementById('topGrantPermBtn')){
     document.getElementById('topGrantPermBtn').addEventListener('click', grantPermissionAgain);
   }
@@ -2093,6 +2174,11 @@ function render(){
   document.getElementById('khatmaListToggleBtn').addEventListener('click', ()=>{
     showKhatmaList = !showKhatmaList;
     if(!showKhatmaList){ editingKhatmaIdx = null; }
+    render();
+  });
+
+  document.getElementById('settingsToggleBtn').addEventListener('click', ()=>{
+    showSettings = !showSettings;
     render();
   });
 
@@ -2171,7 +2257,9 @@ function render(){
         : (document.getElementById('editKhatmaStart_'+i).value || k.startDate);
       let newDur = parseInt(normalizeDigits(document.getElementById('editKhatmaDur_'+i).value), 10);
       if(isNaN(newDur) || newDur < 1) newDur = k.durationDays;
-      k.description = newDesc;
+      const oldName = khatmaName(k);
+      const sameGroup = state.khatmas.filter(x => khatmaName(x) === oldName);
+      sameGroup.forEach(x => { x.description = newDesc || oldName; });
       k.riwaya = newRiwaya;
       k.startDate = newStart;
       k.durationDays = newDur;
@@ -2248,6 +2336,14 @@ function render(){
     });
   });
 
+  document.querySelectorAll('.round-toggle').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = parseInt(btn.dataset.idx, 10);
+      if(expandedRounds.has(i)) expandedRounds.delete(i); else expandedRounds.add(i);
+      render();
+    });
+  });
+
   if(document.getElementById('toggleArchivedBtn')){
     document.getElementById('toggleArchivedBtn').addEventListener('click', ()=>{
       showArchivedKhatmas = !showArchivedKhatmas;
@@ -2256,19 +2352,24 @@ function render(){
   }
 
   document.getElementById('saveBtn').addEventListener('click', async ()=>{
+    if(showNewKhatmaForm) return;
     const surahIdx = parseInt(document.getElementById('surahSel').value, 10);
     let ayah = parseInt(normalizeDigits(document.getElementById('ayahInput').value), 10);
     if(isNaN(ayah) || ayah < 1) ayah = 1;
     if(ayah > SURAHS[surahIdx][1]) ayah = SURAHS[surahIdx][1];
     const cumulative = cumulativeAyat(surahIdx, ayah);
     let date = state.calendarPref === 'hijri' ? readHijriSingleIso('entryDate') : (document.getElementById('entryDateInput').value || todayStr());
-    if(date < khatma.startDate) date = khatma.startDate;
+    if(date < khatma.startDate){
+      alert('لا يمكن تسجيل تاريخ قبل بداية الختمة (' + nd(khatma.startDate) + ').');
+      return;
+    }
     if(date > todayStr()) date = todayStr();
     const editing = editingLast && khatma.entries.length > 0;
     const others = editing ? khatma.entries.slice(0, -1) : khatma.entries;
     const time = editing ? (khatma.entries[khatma.entries.length-1].time || nowTimeStr()) : nowTimeStr();
-    if(others.some(e => e.date === date && e.surahIdx === surahIdx && e.ayah === ayah)){
-      alert('هذا الموضع (' + SURAHS[surahIdx][0] + ' : ' + nd(ayah) + ') مسجَّل مسبقًا في نفس التاريخ. لم يتم تسجيله مرة أخرى.');
+    const dup = others.find(e => e.surahIdx === surahIdx && e.ayah === ayah);
+    if(dup){
+      alert('⚠ هذا الموضع (' + SURAHS[surahIdx][0] + ' : ' + nd(ayah) + ') مسجَّل مسبقًا في هذه الختمة بتاريخ ' + nd(dup.date) + '. لا يمكن تسجيل آية سبق تسجيلها، حتى بتاريخ لاحق.');
       return;
     }
     const check = validateEntryOrder({ entries: others }, date, time, cumulative);
@@ -2277,6 +2378,7 @@ function render(){
       return;
     }
     const entry = { date, surahIdx, ayah, cumulative, time };
+    const finishedNow = cumulative >= TOTAL_AYAT && !others.some(x => x.cumulative >= TOTAL_AYAT);
     if(editing){
       khatma.entries = others.concat([entry]);
       editingLast = false;
@@ -2284,8 +2386,20 @@ function render(){
       khatma.entries.push(entry);
     }
     khatma.entries.sort((a,b)=> entryDateTime(a).localeCompare(entryDateTime(b)));
+    if(finishedNow) khatma.status = 'completed';
     await saveState();
     render();
+    if(finishedNow){
+      setTimeout(()=>{
+        const days = completedDaysTaken(khatma);
+        const relaunch = confirm('🎉 مبارك! أتممت الختمة «' + khatmaName(khatma) + '»' + (days !== null ? ' خلال ' + nd(days) + ' يوم' : '') + '.\nتقبّل الله منك.\n\nهل تريد إعادة الختمة بنفس الإعدادات؟ (يمكنك تغيير التاريخ والرواية)');
+        if(relaunch){
+          newKhatmaPrefill = { description: khatmaName(khatma), riwaya: khatma.riwaya || '', durationDays: khatma.durationDays };
+          showNewKhatmaForm = true;
+          render();
+        }
+      }, 50);
+    }
   });
 
   document.getElementById('numeralSelect').addEventListener('change', async (e)=>{
