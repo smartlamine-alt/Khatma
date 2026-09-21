@@ -80,7 +80,7 @@
 
   header.top{ margin-bottom: 12px; text-align:center; }
   .header-row{ display:flex; align-items:center; justify-content:space-between; gap: 8px; flex-wrap: nowrap; }
-  .header-cluster{ display:flex; align-items:baseline; gap: 6px; flex-shrink:0; }
+  .header-cluster{ display:flex; align-items:baseline; gap: 6px; flex:0 1 auto; min-width:0; flex-wrap:wrap; }
   .app-logo{ width: 30px; height: 30px; object-fit: contain; flex-shrink:0; align-self:center; }
   .version-tag{ color: var(--gold); font-size: 11px; }
   h1{
@@ -169,6 +169,8 @@
   }
 
   .note.center{ text-align:center; }
+  .field-locked{ opacity:.4; pointer-events:none; }
+  .yt-btn{ display:inline-flex; align-items:center; gap:4px; text-decoration:none; font-size:11px; font-weight:400; padding:3px 8px; white-space:nowrap; }
   #helpBtn{ font-size:11px; font-weight:400; padding:3px 8px; white-space:nowrap; }
   h1.top-nav{ display:flex; gap:6px; align-items:center; }
   .nav-btn{ font-family:'Amiri', serif; font-size:19px; font-weight:700; line-height:1.1; padding:4px 12px; border-radius:9px; background:transparent; color:var(--parchment-dim); border:1px solid var(--hairline); }
@@ -185,6 +187,9 @@
   .tuto-dots span{ width:7px; height:7px; border-radius:50%; background:var(--hairline); }
   .tuto-dots span.on{ background:var(--gold); }
   .tuto-actions{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .dlg-backdrop{ position:fixed; inset:0; z-index:1100; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; padding:16px; }
+  .dlg-backdrop .tuto-card{ position:relative; left:auto; bottom:auto; transform:none; width:min(440px, 100%); }
+  .dlg-actions{ display:flex; justify-content:flex-end; gap:8px; }
   .tuto-chip{ position:fixed; bottom:12px; right:12px; z-index:1000; padding:6px 12px; border-radius:999px; font-size:13px; background: color-mix(in srgb, var(--bg-b) 80%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border:1px solid var(--gold); color:var(--parchment); }
   .tuto-arrow{ position:fixed; z-index:1001; pointer-events:none; display:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); animation: tutoBounce .9s ease-in-out infinite; }
   @keyframes tutoBounce{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(7px); } }
@@ -662,10 +667,10 @@ function validateEntryOrder(khatma, date, time, cumulative){
     if(dt > newDT && (!next || dt < entryDateTime(next))) next = e;
   }
   if(prev && cumulative < prev.cumulative){
-    return { ok:false, message: 'هذا الموضع (' + nd(cumulative) + ' آية) أقل مما سجّلته بتاريخ ' + nd(prev.date) + ' (' + nd(prev.cumulative) + ' آية). لا يمكن أن يتراجع الموضع مع مرور الوقت — تحقّق من التاريخ أو من الموضع الذي أدخلته.' };
+    return { ok:false, message: 'هذا الموضع (' + nd(cumulative) + ' آية) أقل مما سجّلته بتاريخ ' + dateDisplayInline(prev.date) + ' (' + nd(prev.cumulative) + ' آية). لا يمكن أن يتراجع الموضع مع مرور الوقت — تحقّق من التاريخ أو من الموضع الذي أدخلته.' };
   }
   if(next && cumulative > next.cumulative){
-    return { ok:false, message: 'هذا الموضع (' + nd(cumulative) + ' آية) أكبر مما سجّلته لاحقًا بتاريخ ' + nd(next.date) + ' (' + nd(next.cumulative) + ' آية). تحقّق من التاريخ أو من الموضع الذي أدخلته.' };
+    return { ok:false, message: 'هذا الموضع (' + nd(cumulative) + ' آية) أكبر مما سجّلته لاحقًا بتاريخ ' + dateDisplayInline(next.date) + ' (' + nd(next.cumulative) + ' آية). تحقّق من التاريخ أو من الموضع الذي أدخلته.' };
   }
   return { ok:true };
 }
@@ -936,6 +941,7 @@ function dateTextCompact(iso){
 
 let state = null;
 let showNewKhatmaForm = false;
+const TRAINING_URL = 'https://www.youtube.com/watch?v=4SgFWJzsbCY&list=PLNxF6yrM2mUQ'; // رابط قائمة تشغيل الدورة (يوتيوب)
 let currentView = 'khatma'; // 'khatma' | 'library'
 let expandedRounds = new Set(); // فهارس الدورات السابقة المفتوحة في السجل
 let selectedKhatmaIdx = null; // null = الختمة الحالية (الأحدث)
@@ -944,6 +950,9 @@ let showKhatmaData = false; // الصفحة مضغوطة عند التحميل: 
 let showKhatmaList = false; // قائمة الختمات مطوية افتراضيًا
 let showSettings = false; // الإعدادات مطوية افتراضيًا
 let editingKhatmaIdx = null; // فهرس الختمة الجاري تعديلها من القائمة، أو null
+let firstSetupDone = false; // تمّ عرض نموذج بيانات الختمة عند أول تسجيل في تطبيق فارغ
+let emptySetupKhatma = null; // الختمة الفارغة التي يُعدَّل نموذجها في مكانها
+let pendingFirstEntry = null; // ما أدخله المستخدم قبل ظهور النموذج
 let newKhatmaPrefill = null; // تعبئة أولية لنموذج "بدء ختمة جديدة" عند الإعادة (الرَّلانس)
 let showArchivedKhatmas = false; // الختمات المؤرشفة مخفية افتراضيًا عن القائمة
 let dbCap = null; // db capability namespace, once resolved (null if unavailable)
@@ -1298,7 +1307,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.36'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.41'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1594,7 +1603,7 @@ async function downloadJSON(filename, dataStr){
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }catch(e){
-    alert('تعذّر تنزيل الملف على هذا المتصفح.');
+    appAlert('تعذّر تنزيل الملف على هذا المتصفح.');
   }
 }
 
@@ -1635,6 +1644,61 @@ function renderVersionBlock(){
   }
 }
 
+// نوافذ التنبيه والتأكيد بنفس شكل بطاقة الدليل التفاعلي (بديل alert/confirm)
+// خيار التعديل للختمة المكتملة: الاسم فقط.
+function nameOnlyEdit(k){ return k.status !== 'cancelled' && completedDaysTaken(k) !== null; }
+
+function askDialog(message, opts){
+  opts = opts || {};
+  const isConfirm = !!opts.confirm;
+  const choices = opts.choices || null; // [{label, value}] — الأول هو الافتراضي
+  return new Promise(resolve => {
+    const bd = document.createElement('div');
+    bd.className = 'dlg-backdrop';
+    const esc = (t) => escHtml(String(t)).replace(/\n/g, '<br>');
+    const actions = choices
+      ? `<button type="button" class="ghost" id="dlgCancel">${esc(opts.cancel || 'إغلاق')}</button>` + choices.map((c, ix) => `<button type="button" class="${ix === 0 ? 'primary' : 'ghost'} dlg-choice" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')
+      : `${isConfirm ? `<button type="button" class="ghost" id="dlgCancel">${esc(opts.cancel || 'إلغاء')}</button>` : ''}<button type="button" class="primary" id="dlgOk">${esc(opts.ok || (isConfirm ? 'موافق' : 'حسنًا'))}</button>`;
+    bd.innerHTML = `<div class="tuto-card" role="alertdialog" aria-modal="true">
+      <div class="tuto-top"><span class="tuto-kicker">${isConfirm ? 'تأكيد' : 'تنبيه'}</span></div>
+      <h3>${esc(opts.title || (isConfirm ? 'تأكيد' : 'تنبيه ⚠'))}</h3>
+      <p>${esc(message)}</p>
+      <div class="dlg-actions">${actions}</div></div>`;
+    const done = (v) => { document.removeEventListener('keydown', onKey, true); bd.remove(); resolve(v); };
+    const onKey = (e) => {
+      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); done(false); }
+      else if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); done(choices ? choices[0].value : true); }
+    };
+    const ok = bd.querySelector('#dlgOk');
+    if(ok) ok.addEventListener('click', () => done(true));
+    bd.querySelectorAll('.dlg-choice').forEach(btn => btn.addEventListener('click', () => done(btn.dataset.v)));
+    const c = bd.querySelector('#dlgCancel');
+    if(c) c.addEventListener('click', () => done(false));
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(bd);
+    (ok || bd.querySelector('.dlg-choice')).focus();
+  });
+}
+const appAlert = (m, o) => askDialog(m, Object.assign({}, o, { confirm: false }));
+const appConfirm = (m, o) => askDialog(m, Object.assign({}, o, { confirm: true }));
+
+// يعيد ما كتبه المستخدم في حقول التسجيل بعد إغلاق نموذج بيانات الختمة.
+function restorePendingFirstEntry(){
+  const p = pendingFirstEntry;
+  pendingFirstEntry = null;
+  if(!p) return;
+  const sel = document.getElementById('surahSel'), ay = document.getElementById('ayahInput');
+  if(sel) sel.value = p.surahIdx;
+  if(ay) ay.value = p.ayah;
+  if(state.calendarPref === 'hijri'){
+    const el = document.getElementById('entryDateHijri');
+    if(el){ el.dataset.iso = p.date; el.value = nd(toHijriNumericStrRev(p.date)); }
+  } else {
+    const el = document.getElementById('entryDateInput');
+    if(el) el.value = p.date;
+  }
+}
+
 // دليل تفاعلي: بطاقة شفافة + سهم أحمر فوق القسم المشروح
 let tutorialActive = null;
 function openTutorial(){
@@ -1649,15 +1713,15 @@ function openTutorial(){
     { t:'الختمة الحالية', sel: () => { const h = document.querySelector('h2.inline-title'); return h ? h.closest('section') : null; },
       b:'تعرض تاريخ البداية وعدد الأيام (قابل للتعديل) والنهاية.<br><b>المقدار اليومي</b> = أحزاب القرآن (60) ÷ عدد الأيام، وتُبيّن الأداة إن كنت متقدّمًا أو متأخرًا عنه.' },
     { t:'+ بدء ختمة جديدة', sel: () => document.getElementById('newKhatmaBtn') || document.querySelector('.new-khatma-form'),
-      b:'يفتح نموذجًا فيه: <b>تاريخ البدء</b>، <b>عدد الأيام</b>، <b>الوصف</b> (اسم اختياري)، <b>الرواية</b>.<br>• «تأكيد البدء» يحفظ الختمة الحالية في السجل ويبدأ الجديدة؛ «إلغاء» يغلق النموذج.<br>• أثناء فتح النموذج يتعطّل «تسجيل الموضع الحالي» وقفل عدد أيام الختمة الحالية، ويعرض التسجيل سورة الفاتحة.<br>• اسم جديد = ختمة جديدة؛ نفس الاسم = دورة جديدة لنفس الختمة.' },
+      b:'يفتح نموذجًا فيه: <b>تاريخ البدء</b>، <b>عدد الأيام</b>، <b>الوصف</b> (اسم اختياري)، <b>الرواية</b>.<br>• «تأكيد البدء» يحفظ الختمة الحالية في السجل ويبدأ الجديدة؛ «إلغاء» يغلق النموذج.<br>• أثناء فتح النموذج تُعتَّم بقية الصفحة ويتعطّل التسجيل، ويعرض سورة الفاتحة.<br>• اسم جديد = ختمة جديدة؛ نفس الاسم = دورة جديدة لنفس الختمة.' },
     { t:'تسجيل الموضع الحالي', sel: () => document.querySelector('section.hero'),
-      b:'اختر السورة والآية والتاريخ ثم «تحديث».<br>• التاريخ: لا قبل بداية الختمة ولا بعد اليوم.<br>• لا تُقبل آية سبق تسجيلها في نفس الختمة.<br>• «✎ تعديل آخر تسجيل» يصحّح آخر سطر.<br>• السورة الحالية تظهر أولًا في القائمة.' },
+      b:'اختر السورة والآية والتاريخ ثم «تحديث».<br>• التاريخ: لا قبل بداية الختمة ولا بعد اليوم.<br>• لا تُقبل آية سبق تسجيلها في نفس الختمة.<br>• «✎ تعديل آخر تسجيل» يصحّح آخر سطر.<br>• السورة الحالية تظهر أولًا في القائمة.<br>• عند أول تسجيل في أداة فارغة يظهر نموذج بيانات الختمة (البداية، الأيام، الاسم، الرواية) وتُعتَّم بقية الصفحة.' },
     { t:'السجل', pre: () => { showKhatmaData = true; }, sel: () => document.querySelector('#mainContent > section'),
       b:'كل سطر تسجيل. <b>التراكم اليومي</b> = أحزاب السطر − آخر موضع في اليوم السابق.<br>• أقل من المقدار اليومي ← السطر <b style="color:#E5322D">أحمر</b>.<br>• أكبر منه ← السطر <b style="color:#E8C547">أصفر</b>.<br>الدورات السابقة مطويّة بزر <b>+</b> يفتح تفاصيلها.' },
     { t:'إتمام الختمة وإعادتها', sel: () => document.querySelector('section.hero'),
       b:'عند تسجيل سورة الناس آية 6 تظهر تهنئة وسؤال: إعادة الختمة؟<br>«نعم» يفتح نموذجًا بنفس الاسم (يمكن تغيير التاريخ والأيام والرواية) وتُعدّ <b>دورة جديدة لنفس الختمة</b>، ثم يبدأ التسجيل من الفاتحة.' },
     { t:'قائمة الختمات', pre: () => { showKhatmaList = true; }, sel: () => document.getElementById('khatmaListContent'),
-      b:'اسم واحد لكل ختمة، وتحته دوراتها بتواريخها وحالة كل دورة (جارية / مكتملة / ملغاة).<br>الأزرار: تعديل (تغيير الاسم يشمل كل الدورات)، إلغاء، أرشفة، إعادة، حذف.' },
+      b:'اسم واحد لكل ختمة، وتحته دوراتها بتواريخها وحالة كل دورة (جارية / مكتملة / ملغاة).<br>الأزرار: تعديل (للمكتملة: الاسم فقط والباقي مُعتَّم؛ تغيير الاسم يشمل كل الدورات)، إلغاء، أرشفة (للمكتملة أو الملغاة فقط؛ الجارية تُلغى ثم تُؤرشف بعد تأكيدك)، إعادة، حذف.<br>الختمة الملغاة لا تقبل تسجيلًا جديدًا: تُعرض عليك «استئناف» أو «من البداية».' },
     { t:'النسخة الاحتياطية المحلية', sel: () => document.querySelector('.backup-section'),
       b:'اربط ملفًا أو مجلدًا لحفظ بياناتك تلقائيًا بصيغة JSON. يظهر مؤشر «ملف JSON محدَّث» مع آخر وقت حفظ وموضع الملف.<br>إن طلب المتصفح إذنًا جديدًا تُعتَّم الصفحة حتى تضغط «منح الإذن ومتابعة».' }
   ];
@@ -1806,27 +1870,28 @@ function render(){
     }
 
     if(editingKhatmaIdx === i){
+      const lockRest = nameOnlyEdit(k);
       return `<tr class="khatma-edit-row"><td colspan="4">
         <div class="row">
           <div class="field">
             <label for="editKhatmaDesc_${i}">الاسم <small>(يشمل كل دورات هذه الختمة)</small></label>
             <input type="text" id="editKhatmaDesc_${i}" value="${escHtml(k.description || '')}" placeholder="خ${nd(i+1)}" maxlength="60">
           </div>
-          <div class="field">
+          <div class="field${lockRest ? ' field-locked' : ''}">
             <label for="editKhatmaRiwaya_${i}">الرواية</label>
-            ${riwayaSelectHtml('editKhatmaRiwaya_'+i, k.riwaya || '')}
+            ${lockRest ? riwayaSelectHtml('editKhatmaRiwaya_'+i, k.riwaya || '').replace('<select', '<select disabled') : riwayaSelectHtml('editKhatmaRiwaya_'+i, k.riwaya || '')}
           </div>
         </div>
         <div class="row">
-          <div class="field">
+          <div class="field${lockRest ? ' field-locked' : ''}">
             <label for="editKhatmaStart_${i}">تاريخ البدء</label>
             ${state.calendarPref === 'hijri'
-              ? hijriSingleInputHtml('editKhatmaStart_'+i, k.startDate, false)
-              : `<input type="date" id="editKhatmaStart_${i}" value="${k.startDate}">`}
+              ? hijriSingleInputHtml('editKhatmaStart_'+i, k.startDate, lockRest)
+              : `<input type="date" id="editKhatmaStart_${i}" value="${k.startDate}" ${lockRest ? 'disabled' : ''}>`}
           </div>
-          <div class="field">
+          <div class="field${lockRest ? ' field-locked' : ''}">
             <label for="editKhatmaDur_${i}">عدد الأيام</label>
-            <input type="text" inputmode="numeric" pattern="[0-9]*" id="editKhatmaDur_${i}" value="${nd(k.durationDays)}">
+            <input type="text" inputmode="numeric" pattern="[0-9]*" id="editKhatmaDur_${i}" value="${nd(k.durationDays)}" ${lockRest ? 'disabled' : ''}>
           </div>
         </div>
         <div class="actions">
@@ -1853,7 +1918,7 @@ function render(){
       <td>${nd(k.durationDays)} يوم</td>
       <td>${statusHtml}</td>
       <td>
-        <button class="ghost edit-khatma-btn" data-idx="${i}" title="تعديل">✎</button>
+        <button class="ghost edit-khatma-btn" data-idx="${i}" title="${nameOnlyEdit(k) ? 'تعديل الاسم' : 'تعديل'}">✎</button>
         ${k.status === 'cancelled' ? `
           <button class="ghost resume-khatma-btn" data-idx="${i}" title="استئناف">▶ استئناف</button>
           <button class="ghost relance-khatma-btn" data-idx="${i}" title="إعادة من البداية">🔁 من البداية</button>
@@ -1861,7 +1926,7 @@ function render(){
           ${kDays !== null ? `<button class="ghost relance-khatma-btn" data-idx="${i}" title="إعادة">🔁</button>` : ''}
           ${canCancel ? `<button class="ghost cancel-khatma-btn" data-idx="${i}" title="إلغاء الختمة">🚫</button>` : ''}
         `}
-        <button class="ghost archive-khatma-btn" data-idx="${i}" title="أرشفة (إخفاء)">📦</button>
+        <button class="ghost archive-khatma-btn" data-idx="${i}" title="أرشفة (للمكتملة أو الملغاة)">📦</button>
         <button class="ghost delete-khatma-btn" data-idx="${i}" title="حذف نهائي">🗑</button>
       </td>
     </tr>`;
@@ -2010,6 +2075,7 @@ function render(){
           <img src="${LOGO_DATA_URI}" alt="شعار ختمتي" class="app-logo">
           <h1 class="top-nav"><button type="button" class="nav-btn ${currentView === 'khatma' ? 'active' : ''}" id="navKhatmaBtn">ختمتي</button><button type="button" class="nav-btn ${currentView === 'library' ? 'active' : ''}" id="navLibraryBtn">مكتبتي</button></h1>
           <button type="button" class="nav-btn" id="helpBtn" title="دليل تفاعلي" aria-label="دليل تفاعلي">دليل تفاعلي</button>
+          <a class="nav-btn yt-btn" href="${TRAINING_URL}" target="_blank" rel="noopener noreferrer" title="الدورة التكوينية على يوتيوب"><svg viewBox="0 0 24 24" width="20" height="14" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="4.5" fill="#FF0000"/><path d="M10 8.7v6.6l5.6-3.3z" fill="#fff"/></svg>الدورة</a>
           <span class="version-tag">v${APP_VERSION}</span>
         </div>
         <div class="credit-line">فكرة وتصميم: شرشالي محمد أمين<br>برنامج مجاني غير ربحي</div>
@@ -2065,11 +2131,6 @@ function render(){
           ${supportsFileSystemAccess() ? `<button class="ghost" id="topLinkFolderBtn">ربط مجلد بدلًا من ذلك</button>` : ''}
         </div>
       </section>
-    ` : fileLinkStatus === 'needs-permission' ? `
-      <section class="status-banner status-behind perm-banner" style="text-align:start; font-weight:500;">
-        <div style="margin-bottom:10px;">${linkMode === 'file' ? 'الملف المرتبط' : 'المجلد المرتبط'} يحتاج إذنًا جديدًا من المتصفح للمتابعة تلقائيًا.</div>
-        <button class="primary" id="topGrantPermBtn">منح الإذن ومتابعة</button>
-      </section>
     ` : ''}
 
     <section class="hero compact">
@@ -2114,8 +2175,8 @@ function render(){
             <div class="field">
               <label for="newStartInput">تاريخ بدء الختمة الجديدة</label>
               ${state.calendarPref === 'hijri'
-                ? hijriSingleInputHtml('newStart', todayStr(), false)
-                : `<input type="date" id="newStartInput" value="${todayStr()}">`}
+                ? hijriSingleInputHtml('newStart', (newKhatmaPrefill && newKhatmaPrefill.startDate) || todayStr(), false)
+                : `<input type="date" id="newStartInput" value="${(newKhatmaPrefill && newKhatmaPrefill.startDate) || todayStr()}">`}
             </div>
             <div class="field">
               <label for="newDurationInput">عدد أيامها</label>
@@ -2132,7 +2193,7 @@ function render(){
               ${riwayaSelectHtml('newRiwayaInput', newKhatmaPrefill ? newKhatmaPrefill.riwaya : (khatma.riwaya || ''))}
             </div>
           </div>
-          <div class="note">سيتم حفظ الختمة الحالية في السجل وبدء ختمة جديدة بهذه البيانات.</div>
+          <div class="note">${emptySetupKhatma ? 'لا توجد تسجيلات بعد: أدخل بيانات الختمة قبل أول تسجيل.' : 'سيتم حفظ الختمة الحالية في السجل وبدء ختمة جديدة بهذه البيانات.'}</div>
           <div class="actions" style="margin-top:10px;">
             <button class="primary" id="confirmNewKhatmaBtn">تأكيد البدء</button>
             <button class="ghost" id="cancelNewKhatmaBtn">إلغاء</button>
@@ -2254,6 +2315,27 @@ function render(){
     if(permLocked && !c.classList.contains('perm-banner')){ c.setAttribute('inert', ''); c.classList.add('perm-dim'); }
     else { c.removeAttribute('inert'); c.classList.remove('perm-dim'); }
   });
+  if(showNewKhatmaForm){
+    let node = document.querySelector('.new-khatma-form');
+    while(node && node !== app && node.parentElement){
+      const parent = node.parentElement;
+      [...parent.children].forEach(c => { if(c !== node){ c.setAttribute('inert', ''); c.classList.add('perm-dim'); } });
+      node = parent;
+    }
+  }
+  const oldPermDlg = document.getElementById('permDialog');
+  if(oldPermDlg) oldPermDlg.remove();
+  if(permLocked){
+    const pd = document.createElement('div');
+    pd.className = 'dlg-backdrop';
+    pd.id = 'permDialog';
+    pd.innerHTML = `<div class="tuto-card" role="alertdialog" aria-modal="true">
+      <div class="tuto-top"><span class="tuto-kicker">إذن</span></div>
+      <h3>السماح بتعديل ملف JSON ⚠</h3>
+      <p>${linkMode === 'file' ? 'الملف المرتبط' : 'المجلد المرتبط'} يحتاج إذنًا جديدًا من المتصفح ليتمكّن الموقع من تعديل ملف JSON ومتابعة الحفظ التلقائي.</p>
+      <div class="dlg-actions"><button type="button" class="primary" id="topGrantPermBtn">منح الإذن ومتابعة</button></div></div>`;
+    document.body.appendChild(pd);
+  }
   if(fileLinkStatus === 'needs-permission' && document.getElementById('topGrantPermBtn')){
     document.getElementById('topGrantPermBtn').addEventListener('click', grantPermissionAgain);
   }
@@ -2315,23 +2397,33 @@ function render(){
       if(isNaN(newDur) || newDur < 0) newDur = 0;
       const newDesc = document.getElementById('newDescInput').value.trim();
       const newRiwaya = document.getElementById('newRiwayaInput').value.trim();
-      state.khatmas.push(blankKhatma(newStart, newDur, newDesc, newRiwaya));
+      const inPlace = emptySetupKhatma;
+      if(inPlace){
+        Object.assign(inPlace, { startDate: newStart, durationDays: newDur, description: newDesc, riwaya: newRiwaya });
+        firstSetupDone = true;
+        emptySetupKhatma = null;
+      } else {
+        state.khatmas.push(blankKhatma(newStart, newDur, newDesc, newRiwaya));
+        selectedKhatmaIdx = null;
+      }
       showNewKhatmaForm = false;
       newKhatmaPrefill = null;
       editingLast = false;
-      selectedKhatmaIdx = null;
       await saveState();
       render();
+      restorePendingFirstEntry();
     });
     document.getElementById('cancelNewKhatmaBtn').addEventListener('click', ()=>{
+      if(emptySetupKhatma){ firstSetupDone = true; emptySetupKhatma = null; }
       showNewKhatmaForm = false;
       newKhatmaPrefill = null;
       render();
+      restorePendingFirstEntry();
     });
   } else {
-    document.getElementById('newKhatmaBtn').addEventListener('click', ()=>{
+    document.getElementById('newKhatmaBtn').addEventListener('click', async ()=>{
       if(!st.finished){
-        const ok = confirm('لم تُكمل الختمة الحالية بعد (' + fmt(st.progress) + ' / ' + fmt(TOTAL_AYAT) + ' آية). هل تريد المتابعة وبدء ختمة جديدة رغم ذلك؟');
+        const ok = await appConfirm('لم تُكمل الختمة الحالية بعد (' + fmt(st.progress) + ' / ' + fmt(TOTAL_AYAT) + ' آية). هل تريد المتابعة وبدء ختمة جديدة رغم ذلك؟');
         if(!ok) return;
       }
       newKhatmaPrefill = null;
@@ -2367,9 +2459,11 @@ function render(){
       const oldName = khatmaName(k);
       const sameGroup = state.khatmas.filter(x => khatmaName(x) === oldName);
       sameGroup.forEach(x => { x.description = newDesc || oldName; });
-      k.riwaya = newRiwaya;
-      k.startDate = newStart;
-      k.durationDays = newDur;
+      if(!nameOnlyEdit(k)){
+        k.riwaya = newRiwaya;
+        k.startDate = newStart;
+        k.durationDays = newDur;
+      }
       editingKhatmaIdx = null;
       await saveState();
       render();
@@ -2389,7 +2483,7 @@ function render(){
     btn.addEventListener('click', async ()=>{
       const i = parseInt(btn.dataset.idx, 10);
       const k = state.khatmas[i];
-      const ok = confirm('هل تريد إلغاء "' + khatmaName(k) + '"؟');
+      const ok = await appConfirm('هل تريد إلغاء "' + khatmaName(k) + '"؟', { ok: 'نعم', cancel: 'لا' });
       if(!ok) return;
       k.status = 'cancelled';
       await saveState();
@@ -2410,7 +2504,13 @@ function render(){
   document.querySelectorAll('.archive-khatma-btn').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const i = parseInt(btn.dataset.idx, 10);
-      state.khatmas[i].archived = true;
+      const k = state.khatmas[i];
+      if(k.status !== 'cancelled' && completedDaysTaken(k) === null){
+        const ok = await appConfirm('«' + khatmaName(k) + '» ما زالت جارية، ولا تُؤرشف إلا الختمة المكتملة أو الملغاة.\nهل تريد إلغاءها ثم أرشفتها؟', { title: 'أرشفة ختمة جارية', ok: 'إلغاء وأرشفة', cancel: 'تراجع' });
+        if(!ok) return;
+        k.status = 'cancelled';
+      }
+      k.archived = true;
       await saveState();
       render();
     });
@@ -2429,7 +2529,7 @@ function render(){
     btn.addEventListener('click', async ()=>{
       const i = parseInt(btn.dataset.idx, 10);
       const k = state.khatmas[i];
-      const ok = confirm('حذف "' + khatmaName(k) + '" نهائيًا مع كل تسجيلاتها؟ لا يمكن التراجع عن هذا.');
+      const ok = await appConfirm('حذف "' + khatmaName(k) + '" نهائيًا مع كل تسجيلاتها؟ لا يمكن التراجع عن هذا.', { title: 'حذف نهائي', ok: 'حذف', cancel: 'تراجع' });
       if(!ok) return;
       state.khatmas.splice(i, 1);
       if(state.khatmas.length === 0){
@@ -2460,6 +2560,34 @@ function render(){
 
   document.getElementById('saveBtn').addEventListener('click', async ()=>{
     if(showNewKhatmaForm) return;
+    if(khatma.status === 'cancelled'){
+      const choice = await askDialog('الختمة «' + khatmaName(khatma) + '» ملغاة، ولا يمكن تسجيل قيم جديدة فيها.\nاختر: متابعتها من حيث توقفت، أو إعادتها من البداية.', {
+        confirm: true, title: 'ختمة ملغاة ⚠', cancel: 'إغلاق',
+        choices: [{ label: '▶ استئناف', value: 'resume' }, { label: '🔁 من البداية', value: 'restart' }]
+      });
+      if(choice === 'resume'){
+        khatma.status = 'ongoing';
+        await saveState();
+        render();
+      } else if(choice === 'restart'){
+        newKhatmaPrefill = { description: khatmaName(khatma), riwaya: khatma.riwaya || '', durationDays: khatma.durationDays };
+        showNewKhatmaForm = true;
+        render();
+      }
+      return;
+    }
+    if(!firstSetupDone && state.khatmas.every(k => k.entries.length === 0)){
+      pendingFirstEntry = {
+        surahIdx: document.getElementById('surahSel').value,
+        ayah: document.getElementById('ayahInput').value,
+        date: state.calendarPref === 'hijri' ? readHijriSingleIso('entryDate') : (document.getElementById('entryDateInput').value || todayStr())
+      };
+      emptySetupKhatma = khatma;
+      newKhatmaPrefill = { description: khatma.description || '', riwaya: khatma.riwaya || '', durationDays: khatma.durationDays, startDate: khatma.startDate };
+      showNewKhatmaForm = true;
+      render();
+      return;
+    }
     const surahIdx = parseInt(document.getElementById('surahSel').value, 10);
     let ayah = parseInt(normalizeDigits(document.getElementById('ayahInput').value), 10);
     if(isNaN(ayah) || ayah < 1) ayah = 1;
@@ -2467,7 +2595,7 @@ function render(){
     const cumulative = cumulativeAyat(surahIdx, ayah);
     let date = state.calendarPref === 'hijri' ? readHijriSingleIso('entryDate') : (document.getElementById('entryDateInput').value || todayStr());
     if(date < khatma.startDate){
-      alert('لا يمكن تسجيل تاريخ قبل بداية الختمة (' + nd(khatma.startDate) + ').');
+      await appAlert('لا يمكن تسجيل تاريخ قبل بداية الختمة (' + dateDisplayInline(khatma.startDate) + ').');
       return;
     }
     if(date > todayStr()) date = todayStr();
@@ -2476,12 +2604,12 @@ function render(){
     const time = editing ? (khatma.entries[khatma.entries.length-1].time || nowTimeStr()) : nowTimeStr();
     const dup = others.find(e => e.surahIdx === surahIdx && e.ayah === ayah);
     if(dup){
-      alert('⚠ هذا الموضع (' + SURAHS[surahIdx][0] + ' : ' + nd(ayah) + ') مسجَّل مسبقًا في هذه الختمة بتاريخ ' + nd(dup.date) + '. لا يمكن تسجيل آية سبق تسجيلها، حتى بتاريخ لاحق.');
+      await appAlert('هذا الموضع (' + SURAHS[surahIdx][0] + ' : ' + nd(ayah) + ') مسجَّل مسبقًا في هذه الختمة بتاريخ ' + dateDisplayInline(dup.date) + '. لا يمكن تسجيل آية سبق تسجيلها، حتى بتاريخ لاحق.');
       return;
     }
     const check = validateEntryOrder({ entries: others }, date, time, cumulative);
     if(!check.ok){
-      alert(check.message);
+      await appAlert(check.message);
       return;
     }
     const entry = { date, surahIdx, ayah, cumulative, time };
@@ -2497,9 +2625,9 @@ function render(){
     await saveState();
     render();
     if(finishedNow){
-      setTimeout(()=>{
+      setTimeout(async ()=>{
         const days = completedDaysTaken(khatma);
-        const relaunch = confirm('🎉 مبارك! أتممت الختمة «' + khatmaName(khatma) + '»' + (days !== null ? ' خلال ' + nd(days) + ' يوم' : '') + '.\nتقبّل الله منك.\n\nهل تريد إعادة الختمة بنفس الإعدادات؟ (يمكنك تغيير التاريخ والرواية)');
+        const relaunch = await appConfirm('أتممت الختمة «' + khatmaName(khatma) + '»' + (days !== null ? ' خلال ' + nd(days) + ' يوم' : '') + '.\nتقبّل الله منك.\n\nهل تريد إعادة الختمة بنفس الإعدادات؟ (يمكنك تغيير التاريخ والرواية)', { title: '🎉 مبارك!', ok: 'نعم، أعد الختمة', cancel: 'لا' });
         if(relaunch){
           newKhatmaPrefill = { description: khatmaName(khatma), riwaya: khatma.riwaya || '', durationDays: khatma.durationDays };
           showNewKhatmaForm = true;
@@ -2564,9 +2692,9 @@ function render(){
         const migrated = migrateIfNeeded(imported);
         if(!migrated){
           if(versionWarning){
-            alert('هذا الملف محفوظ بإصدار بيانات رقم ' + versionWarning.fileVersion + '، وهو أحدث من إصدار هذا التطبيق (رقم ' + APP_DATA_VERSION + '). حدّث ملف HTML أولًا قبل استيراده.');
+            await appAlert('هذا الملف محفوظ بإصدار بيانات رقم ' + versionWarning.fileVersion + '، وهو أحدث من إصدار هذا التطبيق (رقم ' + APP_DATA_VERSION + '). حدّث ملف HTML أولًا قبل استيراده.');
           } else {
-            alert('الملف غير صالح.');
+            await appAlert('الملف غير صالح.');
           }
           versionWarning = wasWarningBefore; // لا يؤثر هذا الاستيراد الفاشل على حالة التطبيق الحالية
           return;
@@ -2577,7 +2705,7 @@ function render(){
         await saveState();
         render();
       }catch(err){
-        alert('تعذّرت قراءة الملف. تأكد أنه ملف JSON صحيح تم تصديره من هذه الأداة.');
+        await appAlert('تعذّرت قراءة الملف. تأكد أنه ملف JSON صحيح تم تصديره من هذه الأداة.');
       }
     };
     reader.readAsText(file);
