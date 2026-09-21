@@ -170,10 +170,13 @@
 
   .note.center{ text-align:center; }
   .field-locked{ opacity:.4; pointer-events:none; }
-  .yt-btn{ display:inline-flex; align-items:center; gap:4px; text-decoration:none; font-size:11px; font-weight:400; padding:3px 8px; white-space:nowrap; }
-  #helpBtn{ font-size:11px; font-weight:400; padding:3px 8px; white-space:nowrap; }
-  h1.top-nav{ display:flex; gap:6px; align-items:center; }
-  .nav-btn{ font-family:'Amiri', serif; font-size:19px; font-weight:700; line-height:1.1; padding:4px 12px; border-radius:9px; background:transparent; color:var(--parchment-dim); border:1px solid var(--hairline); }
+  .yt-btn{ gap:5px; text-decoration:none; font-size:7.5px; font-weight:400; padding:0 14px; white-space:nowrap; line-height:1; }
+  #helpBtn{ font-size:11px; font-weight:400; padding:0 8px; white-space:nowrap; line-height:1; }
+  h1.top-nav{ display:flex; gap:6px; align-items:center; margin:0; }
+  .header-cluster{ align-items:center; }
+  .nav-btn{ display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; height:34px; }
+  .nav-btn:not(.yt-btn):not(#helpBtn){ font-family:'Amiri', serif; font-size:19px; font-weight:700; line-height:1; padding:0 12px; border-radius:9px; background:transparent; color:var(--parchment-dim); border:1px solid var(--hairline); }
+  #helpBtn, .yt-btn{ border-radius:9px; background:transparent; color:var(--parchment-dim); border:1px solid var(--hairline); }
   .nav-btn.active{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
   #app > [hidden]{ display:none !important; }
   .tuto-card{ position:fixed; bottom:12px; left:50%; transform:translateX(-50%); z-index:1000; width:min(460px, calc(100% - 24px)); background: color-mix(in srgb, var(--bg-b) 72%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color:var(--parchment); border:1px solid var(--hairline); border-radius:16px; padding:12px 16px 12px; box-shadow:0 10px 32px rgba(0,0,0,.45); }
@@ -470,8 +473,10 @@
     .header-cluster{ gap: 4px; }
     .app-logo{ width: 22px; height: 22px; }
     h1{ font-size: 20px; }
-    .nav-btn{ font-size:15px; padding:3px 8px; }
-    #helpBtn{ font-size:10.5px; padding:2px 6px; }
+    .nav-btn{ height:28px; }
+    .nav-btn:not(.yt-btn):not(#helpBtn){ font-size:15px; padding:0 8px; }
+    #helpBtn{ font-size:10.5px; padding:0 6px; }
+    .yt-btn{ padding:0 8px; }
     .version-tag{ font-size: 9.5px; }
     .credit-line{ font-size: 8.5px; }
   }
@@ -1307,7 +1312,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.41'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.45'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2075,7 +2080,7 @@ function render(){
           <img src="${LOGO_DATA_URI}" alt="شعار ختمتي" class="app-logo">
           <h1 class="top-nav"><button type="button" class="nav-btn ${currentView === 'khatma' ? 'active' : ''}" id="navKhatmaBtn">ختمتي</button><button type="button" class="nav-btn ${currentView === 'library' ? 'active' : ''}" id="navLibraryBtn">مكتبتي</button></h1>
           <button type="button" class="nav-btn" id="helpBtn" title="دليل تفاعلي" aria-label="دليل تفاعلي">دليل تفاعلي</button>
-          <a class="nav-btn yt-btn" href="${TRAINING_URL}" target="_blank" rel="noopener noreferrer" title="الدورة التكوينية على يوتيوب"><svg viewBox="0 0 24 24" width="20" height="14" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="4.5" fill="#FF0000"/><path d="M10 8.7v6.6l5.6-3.3z" fill="#fff"/></svg>الدورة</a>
+          <a class="nav-btn yt-btn" href="${TRAINING_URL}" target="_blank" rel="noopener noreferrer" title="الدورة التكوينية على يوتيوب"><svg viewBox="0 0 24 24" width="28" height="20" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="4.5" fill="#FF0000"/><path d="M10 8.7v6.6l5.6-3.3z" fill="#fff"/></svg>الدورة التكوينية</a>
           <span class="version-tag">v${APP_VERSION}</span>
         </div>
         <div class="credit-line">فكرة وتصميم: شرشالي محمد أمين<br>برنامج مجاني غير ربحي</div>
