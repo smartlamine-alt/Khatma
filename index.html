@@ -169,6 +169,8 @@
   }
 
   .note.center{ text-align:center; }
+  section.hero.just-saved{ animation: heroSavedFlash 1.6s ease-out; }
+  @keyframes heroSavedFlash{ 0%{ background: color-mix(in srgb, var(--ahead) 38%, var(--panel)); } 100%{ background: var(--panel); } }
   .field-locked{ opacity:.4; pointer-events:none; }
   .yt-btn{ gap:5px; text-decoration:none; font-size:7.5px; font-weight:400; padding:0 14px; white-space:nowrap; line-height:1; }
   #helpBtn{ font-size:11px; font-weight:400; padding:0 8px; white-space:nowrap; line-height:1; }
@@ -1312,7 +1314,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.45'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.46'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2138,7 +2140,7 @@ function render(){
       </section>
     ` : ''}
 
-    <section class="hero compact">
+    <section class="hero compact" id="heroSection">
       <div class="hero-head">
         <h2>تسجيل الموضع الحالي</h2>
         <div class="hero-status">${heroStatus}</div>
@@ -2565,6 +2567,13 @@ function render(){
 
   document.getElementById('saveBtn').addEventListener('click', async ()=>{
     if(showNewKhatmaForm) return;
+    const flashSaved = () => {
+      const hero = document.getElementById('heroSection');
+      if(!hero) return;
+      hero.classList.remove('just-saved'); void hero.offsetWidth;
+      hero.classList.add('just-saved');
+      setTimeout(() => hero.classList.remove('just-saved'), 1600);
+    };
     if(khatma.status === 'cancelled'){
       const choice = await askDialog('الختمة «' + khatmaName(khatma) + '» ملغاة، ولا يمكن تسجيل قيم جديدة فيها.\nاختر: متابعتها من حيث توقفت، أو إعادتها من البداية.', {
         confirm: true, title: 'ختمة ملغاة ⚠', cancel: 'إغلاق',
@@ -2629,6 +2638,7 @@ function render(){
     if(finishedNow) khatma.status = 'completed';
     await saveState();
     render();
+    flashSaved();
     if(finishedNow){
       setTimeout(async ()=>{
         const days = completedDaysTaken(khatma);
