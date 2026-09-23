@@ -169,6 +169,14 @@
   }
 
   .note.center{ text-align:center; }
+  .surah-picker-btn{ width:100%; text-align:start; background: var(--panel-2); border: 1px solid var(--hairline); color: var(--parchment); padding: 10px 12px; border-radius: 8px; font-family:'Tajawal', sans-serif; font-size: 15px; cursor:pointer; }
+  .surah-picker-btn:disabled{ opacity:.5; cursor:not-allowed; }
+  .surah-picker-btn:focus{ outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+  .surah-picker-panel{ z-index:1200; overflow-y:auto; background: var(--panel-2); border: 1px solid var(--hairline); border-radius: 8px; box-shadow:0 10px 28px rgba(0,0,0,.45); font-family:'Tajawal', sans-serif; font-size: 14px; }
+  .surah-picker-item{ padding:8px 12px; cursor:pointer; border-bottom:1px solid color-mix(in srgb, var(--hairline) 60%, transparent); }
+  .surah-picker-item:last-child{ border-bottom:none; }
+  .surah-picker-item:hover{ background: color-mix(in srgb, var(--gold) 18%, transparent); }
+  .surah-picker-item.active{ background: var(--gold); color: var(--ink); font-weight:700; }
   section.hero.just-saved{ animation: heroSavedFlash 1.6s ease-out; }
   @keyframes heroSavedFlash{ 0%{ background: color-mix(in srgb, var(--ahead) 38%, var(--panel)); } 100%{ background: var(--panel); } }
   .field-locked{ opacity:.4; pointer-events:none; }
@@ -949,6 +957,7 @@ function dateTextCompact(iso){
 let state = null;
 let showNewKhatmaForm = false;
 const TRAINING_URL = 'https://www.youtube.com/watch?v=4SgFWJzsbCY&list=PLNxF6yrM2mUQ'; // رابط قائمة تشغيل الدورة (يوتيوب)
+let surahPickerState = { min: 0, current: 0 };
 let currentView = 'khatma'; // 'khatma' | 'library'
 let expandedRounds = new Set(); // فهارس الدورات السابقة المفتوحة في السجل
 let selectedKhatmaIdx = null; // null = الختمة الحالية (الأحدث)
@@ -1314,7 +1323,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.52'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.60'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1708,6 +1717,54 @@ function renderVersionBlock(){
 // خيار التعديل للختمة المكتملة: الاسم فقط.
 function nameOnlyEdit(k){ return k.status !== 'cancelled' && completedDaysTaken(k) !== null; }
 
+// قائمة سور مخصّصة: تحافظ على ترتيب المصحف كاملًا دون حذف أو تكرار، وتُظهر السورة الحالية أعلى القائمة المفتوحة تمامًا (تمرير للقائمة نفسها، لا تغيير في ترتيبها).
+function closeSurahPickerPanel(){
+  const p = document.getElementById('surahPickerPanel');
+  if(p){ if(p._cleanup) p._cleanup(); p.remove(); }
+}
+function openSurahPickerPanel(btn){
+  closeSurahPickerPanel();
+  const { min, current } = surahPickerState;
+  const panel = document.createElement('div');
+  panel.id = 'surahPickerPanel';
+  panel.className = 'surah-picker-panel';
+  let html = '';
+  for(let i = min; i < SURAHS.length; i++){
+    html += `<div class="surah-picker-item${i === current ? ' active' : ''}" data-i="${i}">${nd(i + 1)}. ${SURAHS[i][0]} (${nd(SURAHS[i][1])} آية)</div>`;
+  }
+  panel.innerHTML = html;
+  document.body.appendChild(panel);
+  const r = btn.getBoundingClientRect();
+  panel.style.position = 'fixed';
+  panel.style.left = r.left + 'px';
+  panel.style.width = r.width + 'px';
+  const spaceBelow = window.innerHeight - r.bottom - 12;
+  if(spaceBelow > 120){
+    panel.style.top = (r.bottom + 4) + 'px';
+    panel.style.maxHeight = Math.min(280, spaceBelow) + 'px';
+  } else {
+    panel.style.maxHeight = Math.min(280, r.top - 12) + 'px';
+    panel.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+  }
+  panel.querySelectorAll('.surah-picker-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const i = parseInt(el.dataset.i, 10);
+      const sel = document.getElementById('surahSel');
+      sel.value = String(i);
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      btn.textContent = nd(i + 1) + '. ' + SURAHS[i][0] + ' (' + nd(SURAHS[i][1]) + ' آية)';
+      closeSurahPickerPanel();
+    });
+  });
+  // محاذاة السورة الحالية أعلى القائمة تمامًا عند الفتح، دون لمس ترتيب باقي السور.
+  const activeEl = panel.querySelector('.surah-picker-item.active');
+  if(activeEl) panel.scrollTop = activeEl.offsetTop;
+  const onOutside = (e) => { if(!panel.contains(e.target) && e.target !== btn) closeSurahPickerPanel(); };
+  const onEsc = (e) => { if(e.key === 'Escape') closeSurahPickerPanel(); };
+  panel._cleanup = () => { document.removeEventListener('mousedown', onOutside, true); document.removeEventListener('keydown', onEsc, true); };
+  setTimeout(() => { document.addEventListener('mousedown', onOutside, true); document.addEventListener('keydown', onEsc, true); }, 0);
+}
+
 function askDialog(message, opts){
   opts = opts || {};
   const isConfirm = !!opts.confirm;
@@ -2096,8 +2153,19 @@ function render(){
   const lastIsFinal = (!!last && last.cumulative >= TOTAL_AYAT && !editingLast) || showNewKhatmaForm; // ختمة مكتملة أو جديدة/إعادة ← البدء من الفاتحة
   const selectedSurah = (last && !lastIsFinal) ? last.surahIdx : 0;
   const selectedAyah = (last && !lastIsFinal) ? last.ayah : '';
-  // السورة الحالية أولًا في القائمة، ثم التي بعدها بالترتيب (دائريًا).
-  const surahOptions = SURAHS.map((s,i)=>i).sort((a,b)=> ((a - selectedSurah + SURAHS.length) % SURAHS.length) - ((b - selectedSurah + SURAHS.length) % SURAHS.length))
+  // الحد الأدنى للسورة: عند التعديل لا يجوز التراجع قبل السجل الذي قبل الأخير؛ وعند تسجيل جديد لا يجوز التراجع قبل آخر سجل.
+  // الحد الأعلى ثابت: سورة الناس (آخر سورة).
+  let minSurahIdx = 0;
+  if(editingLast && khatma.entries.length >= 2){
+    minSurahIdx = khatma.entries[khatma.entries.length - 2].surahIdx;
+  } else if(!editingLast && last && !lastIsFinal){
+    minSurahIdx = last.surahIdx;
+  }
+  // بلا تكرار وبلا إعادة ترتيب: تسلسل واحد متصل من الحد الأدنى إلى الناس؛ السورة الحالية مُحدَّدة (selected) في موضعها الطبيعي فقط.
+  const orderedSurahRange = [];
+  for(let i = minSurahIdx; i < SURAHS.length; i++) orderedSurahRange.push(i);
+  surahPickerState = { min: minSurahIdx, current: selectedSurah };
+  const surahOptions = orderedSurahRange
     .map(i=>`<option value="${i}">${nd(i+1)}. ${SURAHS[i][0]} (${nd(SURAHS[i][1])} آية)</option>`).join('');
   const endDate = addDays(khatma.startDate, khatma.durationDays - 1);
 
@@ -2201,12 +2269,13 @@ function render(){
       </div>
       <div class="row hero-row">
         <div class="field">
-          <label for="surahSel">السورة</label>
-          <select id="surahSel" ${showNewKhatmaForm ? 'disabled' : ''}>${surahOptions}</select>
+          <label for="surahPickerBtn">السورة</label>
+          <button type="button" class="surah-picker-btn" id="surahPickerBtn" ${showNewKhatmaForm ? 'disabled' : ''}>${nd(selectedSurah+1)}. ${SURAHS[selectedSurah][0]} (${nd(SURAHS[selectedSurah][1])} آية)</button>
+          <select id="surahSel" style="display:none;" tabindex="-1" aria-hidden="true">${surahOptions}</select>
         </div>
         <div class="field field-ayah">
           <label for="ayahInput">الآية</label>
-          <input type="text" inputmode="numeric" pattern="[0-9]*" id="ayahInput" value="${selectedAyah}" placeholder="رقم" ${showNewKhatmaForm ? 'disabled' : ''}>
+          <input type="text" inputmode="numeric" pattern="[0-9]*" id="ayahInput" value="${selectedAyah}" placeholder="رقم" max="${nd(SURAHS[selectedSurah][1])}" ${showNewKhatmaForm ? 'disabled' : ''}>
         </div>
         <div class="field field-date">
           <label for="entryDateInput">التاريخ</label>
@@ -2230,7 +2299,7 @@ function render(){
         <div class="mf"><label for="durationInput">عدد الأيام</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="durationInput" class="days-mini" value="${nd(khatma.durationDays)}" ${showNewKhatmaForm ? 'disabled' : ''}></div>
         <div class="mf"><label>النهاية</label>${khatma.durationDays > 0 ? dateTextCompact(endDate) : '<span class="date-text">—</span>'}</div>
       </div>
-      ${showNewKhatmaForm ? `<div class="new-khatma-form">
+      ${showNewKhatmaForm ? `<div class="new-khatma-form">${newKhatmaPrefill && newKhatmaPrefill.quick ? `<div class="note" style="margin-bottom:8px;">إعادة «${escHtml(newKhatmaPrefill.description)}» بنفس الإعدادات — يكفي تاريخ البدء.</div>` : ''}
           <div class="row">
             <div class="field">
               <label for="newStartInput">تاريخ بدء الختمة الجديدة</label>
@@ -2238,12 +2307,12 @@ function render(){
                 ? hijriSingleInputHtml('newStart', (newKhatmaPrefill && newKhatmaPrefill.startDate) || todayStr(), false)
                 : `<input type="date" id="newStartInput" value="${(newKhatmaPrefill && newKhatmaPrefill.startDate) || todayStr()}">`}
             </div>
-            <div class="field">
+            <div class="field" ${newKhatmaPrefill && newKhatmaPrefill.quick ? 'style="display:none;"' : ''}>
               <label for="newDurationInput">عدد أيامها</label>
               <input type="text" inputmode="numeric" pattern="[0-9]*" id="newDurationInput" value="${nd(newKhatmaPrefill ? newKhatmaPrefill.durationDays : 0)}">
             </div>
           </div>
-          <div class="row">
+          <div class="row" ${newKhatmaPrefill && newKhatmaPrefill.quick ? 'style="display:none;"' : ''}>
             <div class="field">
               <label for="newDescInput">الوصف (اختياري)</label>
               <input type="text" id="newDescInput" value="${escHtml(newKhatmaPrefill ? newKhatmaPrefill.description : '')}" placeholder="خ${nd(state.khatmas.length + 1)}" maxlength="60">
@@ -2253,7 +2322,7 @@ function render(){
               ${riwayaSelectHtml('newRiwayaInput', newKhatmaPrefill ? newKhatmaPrefill.riwaya : (khatma.riwaya || ''))}
             </div>
           </div>
-          <div class="note">${emptySetupKhatma ? 'لا توجد تسجيلات بعد: أدخل بيانات الختمة قبل أول تسجيل.' : 'سيتم حفظ الختمة الحالية في السجل وبدء ختمة جديدة بهذه البيانات.'}</div>
+          <div class="note" ${newKhatmaPrefill && newKhatmaPrefill.quick ? 'style="display:none;"' : ''}>${emptySetupKhatma ? 'لا توجد تسجيلات بعد: أدخل بيانات الختمة قبل أول تسجيل.' : 'سيتم حفظ الختمة الحالية في السجل وبدء ختمة جديدة بهذه البيانات.'}</div>
           <div class="actions" style="margin-top:10px;">
             <button class="primary" id="confirmNewKhatmaBtn">تأكيد البدء</button>
             <button class="ghost" id="cancelNewKhatmaBtn">إلغاء</button>
@@ -2432,6 +2501,23 @@ function render(){
   });
 
   document.getElementById('surahSel').value = selectedSurah;
+  if(document.getElementById('surahPickerBtn')){
+    document.getElementById('surahPickerBtn').addEventListener('click', (e) => { e.stopPropagation(); openSurahPickerPanel(e.currentTarget); });
+  }
+  { // يمنع كتابة رقم آية أكبر من عدد آيات السورة المختارة
+    const surahSelEl = document.getElementById('surahSel');
+    const ayahInputEl = document.getElementById('ayahInput');
+    const clampAyah = () => {
+      const maxA = SURAHS[parseInt(surahSelEl.value, 10)][1];
+      ayahInputEl.max = String(maxA);
+      const v = parseInt(normalizeDigits(ayahInputEl.value), 10);
+      if(!isNaN(v) && v > maxA) ayahInputEl.value = String(maxA);
+    };
+    if(surahSelEl && ayahInputEl){
+      surahSelEl.addEventListener('change', clampAyah);
+      ayahInputEl.addEventListener('input', clampAyah);
+    }
+  }
 
   document.querySelectorAll('.hijri-cal-btn').forEach(btn=>{
     if(btn.disabled) return;
@@ -2657,6 +2743,10 @@ function render(){
     }
     const surahIdx = parseInt(document.getElementById('surahSel').value, 10);
     let ayah = parseInt(normalizeDigits(document.getElementById('ayahInput').value), 10);
+    if(!isNaN(ayah) && ayah > SURAHS[surahIdx][1]){
+      await appAlert('سورة ' + SURAHS[surahIdx][0] + ' تحتوي ' + nd(SURAHS[surahIdx][1]) + ' آية فقط، فلا يمكن إدخال رقم أكبر.');
+      return;
+    }
     if(isNaN(ayah) || ayah < 1) ayah = 1;
     if(ayah > SURAHS[surahIdx][1]) ayah = SURAHS[surahIdx][1];
     const cumulative = cumulativeAyat(surahIdx, ayah);
@@ -2695,8 +2785,17 @@ function render(){
     if(finishedNow){
       setTimeout(async ()=>{
         const days = completedDaysTaken(khatma);
-        const relaunch = await appConfirm('أتممت الختمة «' + khatmaName(khatma) + '»' + (days !== null ? ' خلال ' + nd(days) + ' يوم' : '') + '.\nتقبّل الله منك.\n\nهل تريد إعادة الختمة بنفس الإعدادات؟ (يمكنك تغيير التاريخ والرواية)', { title: '🎉 مبارك!', ok: 'نعم، أعد الختمة', cancel: 'لا' });
-        if(relaunch){
+        const pace = (days && days > 0) ? fmt1(60 / days) : null;
+        const msg = 'أتممت الختمة «' + khatmaName(khatma) + '»' + (days !== null ? ' خلال ' + nd(days) + ' يوم' : '') + (pace ? ' (بمعدل ' + pace + ' حزب/يوم)' : '') + '.\nتقبّل الله منك.\n\nهل تريد إعادة الختمة؟';
+        const choice = await askDialog(msg, {
+          confirm: true, title: '🎉 مبارك!', cancel: 'لا',
+          choices: [{ label: 'نعم، بنفس الإعدادات', value: 'same' }, { label: 'نعم، بإعدادات مغايرة', value: 'diff' }]
+        });
+        if(choice === 'same'){
+          newKhatmaPrefill = { description: khatmaName(khatma), riwaya: khatma.riwaya || '', durationDays: khatma.durationDays, quick: true };
+          showNewKhatmaForm = true;
+          render();
+        } else if(choice === 'diff'){
           newKhatmaPrefill = { description: khatmaName(khatma), riwaya: khatma.riwaya || '', durationDays: khatma.durationDays };
           showNewKhatmaForm = true;
           render();
