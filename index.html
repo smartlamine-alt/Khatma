@@ -1314,7 +1314,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.46'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.52'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1486,7 +1486,60 @@ async function loadState(){
   if(changed1 || changed2){ await saveState(); }
   }
   render();
+  maybeShowStartupLinkPrompt();
   initGoogleAuthIfAvailable();
+}
+
+// عند عدم وجود ملف/مجلد مرتبط، نطلب ذلك قبل الاستخدام بدل تركه صامتًا (يُعرض مرة واحدة لكل جلسة).
+let startupPromptShown = false;
+function maybeShowStartupLinkPrompt(){
+  if(startupPromptShown) return;
+  if(fileLinkStatus !== 'not-linked' && fileLinkStatus !== 'unsupported') return;
+  startupPromptShown = true;
+  const supported = supportsFileSystemAccess() || supportsFilePicker();
+  const dim = () => { [...app.children].forEach(c => { c.setAttribute('inert', ''); c.classList.add('perm-dim'); }); };
+  const undim = () => { [...app.children].forEach(c => { c.removeAttribute('inert'); c.classList.remove('perm-dim'); }); };
+  dim();
+  const bd = document.createElement('div');
+  bd.className = 'dlg-backdrop';
+  const close = () => { bd.remove(); undim(); };
+  const draw = (hint) => {
+    bd.innerHTML = supported ? `
+      <div class="tuto-card" role="alertdialog" aria-modal="true">
+        <div class="tuto-top"><span class="tuto-kicker">قبل البدء</span></div>
+        <h3>اربط ملف الحفظ 💾</h3>
+        <p>لا بد من ربط مجلد أو ملف JSON لحفظ بياناتك تلقائيًا قبل المتابعة، وإلا فقد تُفقد بياناتك عند مسح بيانات المتصفح.<br><span style="color:#E5322D; font-weight:600;">اختيار مجلد من أجل إنشاء ملف حفظ البيانات</span>${hint ? '<br><b>' + hint + '</b>' : ''}</p>
+        <div class="dlg-actions" style="flex-wrap:wrap;">
+          ${supportsFilePicker() ? '<button type="button" class="ghost" id="startupFile">ربط ملف موجود</button>' : ''}
+          ${supportsFileSystemAccess() ? '<button type="button" class="primary" id="startupFolder">اختيار مجلد</button>' : ''}
+        </div>
+      </div>` : `
+      <div class="tuto-card" role="alertdialog" aria-modal="true">
+        <div class="tuto-top"><span class="tuto-kicker">قبل البدء</span></div>
+        <h3>استيراد نسخة سابقة؟ 📄</h3>
+        <p>هذا المتصفح لا يدعم الربط التلقائي بملف على القرص (متاح على Chrome أو Edge). يمكنك استيراد نسخة JSON محفوظة سابقًا الآن، أو المتابعة والتذكّر بتنزيل نسخة يدويًا لاحقًا من «النسخة الاحتياطية المحلية».</p>
+        <div class="dlg-actions">
+          <button type="button" class="ghost" id="startupSkip">متابعة بدون استيراد</button>
+          <button type="button" class="primary" id="startupImport">استيراد نسخة JSON</button>
+        </div>
+      </div>`;
+    const skip = bd.querySelector('#startupSkip');
+    if(skip) skip.addEventListener('click', close);
+    const fBtn = bd.querySelector('#startupFile');
+    if(fBtn) fBtn.addEventListener('click', async () => {
+      await linkExistingFile();
+      if(fileLinkStatus === 'linked') close(); else draw('لم يكتمل اختيار الملف، حاول مجددًا.');
+    });
+    const dBtn = bd.querySelector('#startupFolder');
+    if(dBtn) dBtn.addEventListener('click', async () => {
+      await linkFolder();
+      if(fileLinkStatus === 'linked') close(); else draw('لم يكتمل اختيار المجلد، حاول مجددًا.');
+    });
+    const iBtn = bd.querySelector('#startupImport');
+    if(iBtn) iBtn.addEventListener('click', () => { close(); const inp = document.getElementById('importFileInput'); if(inp) inp.click(); });
+  };
+  draw();
+  document.body.appendChild(bd);
 }
 
 async function saveState(){
