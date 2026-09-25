@@ -169,6 +169,7 @@
   }
 
   .note.center{ text-align:center; }
+  select, option{ direction: rtl; text-align: right; }
   .surah-picker-btn{ width:100%; text-align:start; background: var(--panel-2); border: 1px solid var(--hairline); color: var(--parchment); padding: 10px 12px; border-radius: 8px; font-family:'Tajawal', sans-serif; font-size: 15px; cursor:pointer; }
   .surah-picker-btn:disabled{ opacity:.5; cursor:not-allowed; }
   .surah-picker-btn:focus{ outline: 2px solid var(--gold-dim); outline-offset: 1px; }
@@ -267,7 +268,7 @@
   .hero-row .field-date{ flex: 0 0 152px; }
   .hero-row .field-btn{ flex: 0 0 auto; }
   .hero-row .field-btn button{ white-space:nowrap; }
-  select, input[type="number"], input[type="text"], input[type="date"], input[type="url"]{
+  select, option, input[type="number"], input[type="text"], input[type="date"], input[type="url"]{
     width:100%;
     background: var(--panel-2);
     border: 1px solid var(--hairline);
@@ -958,6 +959,7 @@ let state = null;
 let showNewKhatmaForm = false;
 const TRAINING_URL = 'https://www.youtube.com/watch?v=4SgFWJzsbCY&list=PLNxF6yrM2mUQ'; // رابط قائمة تشغيل الدورة (يوتيوب)
 let surahPickerState = { min: 0, current: 0 };
+let ledgerViewName = null; // اسم الختمة المعروضة في «السجل» — يبقى ثابتًا حتى لو حُذفت دورتها الجارية، ما دامت دورة أخرى بنفس الاسم موجودة
 let currentView = 'khatma'; // 'khatma' | 'library'
 let expandedRounds = new Set(); // فهارس الدورات السابقة المفتوحة في السجل
 let selectedKhatmaIdx = null; // null = الختمة الحالية (الأحدث)
@@ -1323,7 +1325,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.60'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.70'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1918,8 +1920,20 @@ function render(){
   if(versionWarning){ renderVersionBlock(); return; }
   const app = document.getElementById('app');
 
-  const viewIdx = (selectedKhatmaIdx === null || selectedKhatmaIdx < 0 || selectedKhatmaIdx >= state.khatmas.length)
-    ? state.khatmas.length - 1 : selectedKhatmaIdx;
+  // «الختمة الحالية» و«تسجيل الموضع الحالي» يعكسان دومًا ختمة جارية (غير مؤرشفة وغير منتهية/ملغاة) فقط.
+  // إن أُلغي اختيار المستخدم (تحرير/حذف) يُعاد تلقائيًا لآخر ختمة جارية؛ وإن لم توجد أي ختمة جارية تُنشأ ختمة فارغة جديدة تلقائيًا بدل عرض بيانات ختمة منتهية أو مؤرشفة خطأً.
+  const isUsableKhatma = (k) => !!k && !k.archived && k.status === 'ongoing';
+  let viewIdx = (selectedKhatmaIdx !== null && selectedKhatmaIdx >= 0 && selectedKhatmaIdx < state.khatmas.length && isUsableKhatma(state.khatmas[selectedKhatmaIdx]))
+    ? selectedKhatmaIdx : -1;
+  if(viewIdx < 0){
+    for(let i = state.khatmas.length - 1; i >= 0; i--){ if(isUsableKhatma(state.khatmas[i])){ viewIdx = i; break; } }
+  }
+  if(viewIdx < 0){
+    state.khatmas.push(blankKhatma(todayStr(), 15));
+    viewIdx = state.khatmas.length - 1;
+    selectedKhatmaIdx = null;
+    saveState();
+  }
   const viewedKhatma = state.khatmas[viewIdx];
 
   const khatma = viewedKhatma; // بطاقة "تسجيل الموضع الحالي" و"الختمة الحالية" تعكسان الختمة المختارة من القائمة
@@ -1942,13 +1956,29 @@ function render(){
     g.idxs.push(i);
   });
   const viewName = khatmaName(viewedKhatma);
+  // إن حُذفت الدورة الجارية لاسم ما وبقيت له دورات أخرى (منتهية/ملغاة)، يبقى السجل معروضًا لذلك الاسم دون تبديل تلقائي.
+  if(ledgerViewName === null || !state.khatmas.some(k => khatmaName(k) === ledgerViewName)) ledgerViewName = viewName;
+  const ledgerNameOptions = khatmaGroups.map(g => {
+    const li = g.idxs[g.idxs.length - 1];
+    const gk = state.khatmas[li];
+    const gDays = completedDaysTaken(gk);
+    const gStatus = gDays !== null ? 'مكتملة' : (gk.status === 'cancelled' ? 'ملغاة' : 'جارية');
+    const gDateStr = state.calendarPref === 'gregorian'
+      ? nd(gk.startDate.split('-').reverse().join('/'))
+      : nd(toHijriNumericStrRev(gk.startDate));
+    const label = escHtml(g.name) + ' — ' + gDateStr + ' — ' + gStatus;
+    return `<option value="${escHtml(g.name)}" ${g.name === ledgerViewName ? 'selected' : ''}>${label}</option>`;
+  }).join('');
+  const ledgerIdxs = state.khatmas.map((k, i) => i).filter(i => khatmaName(state.khatmas[i]) === ledgerViewName);
+  const ledgerViewIdx = ledgerIdxs[ledgerIdxs.length - 1];
+  const ledgerKhatma = state.khatmas[ledgerViewIdx];
   const khatmaViewOptions = khatmaGroups
-    .filter(g => g.name === viewName || g.idxs.some(i => !state.khatmas[i].archived))
+    .filter(g => isUsableKhatma(state.khatmas[g.idxs[g.idxs.length - 1]]))
     .map(g => {
       const li = g.idxs[g.idxs.length - 1];
       const k = state.khatmas[li];
       const isCurrent = li === state.khatmas.length - 1;
-      const label = escHtml(g.name) + (g.idxs.length > 1 ? ' ×' + nd(g.idxs.length) : '') + ' — ' + dateDisplayInline(k.startDate) + ' — ' + nd(k.durationDays) + ' يوم' + (isCurrent ? ' (الحالية)' : '');
+      const label = escHtml(g.name) + ' — ' + dateDisplayInline(k.startDate) + ' — ' + nd(k.durationDays) + ' يوم' + (isCurrent ? ' (الحالية)' : '');
       return `<option value="${isCurrent ? 'current' : String(li)}" ${g.name === viewName ? 'selected' : ''}>${label}</option>`;
     }).join('');
 
@@ -2056,7 +2086,7 @@ function render(){
     g.ks.push(k);
   });
   const khatmaListRows = listGroups.map(g =>
-    `<tr class="khatma-group-row"><td colspan="4"><b>${escHtml(g.nm)}</b></td></tr>` + g.ks.map(roundRowFn).join('')
+    `<tr class="khatma-group-row"><td colspan="4"><b>${escHtml(g.nm)}</b> <button type="button" class="ghost view-ledger-btn" data-name="${encodeURIComponent(g.nm)}" title="عرض سجل هذه الختمة">📖 السجل</button></td></tr>` + g.ks.map(roundRowFn).join('')
   ).join('');
 
   const ledgerTableHtml = (vk) => {
@@ -2064,10 +2094,13 @@ function render(){
     return `<div class="ledger-empty">لم تُسجَّل أي قراءة بعد في هذه الختمة. سجّل موضعك الحالي لتبدأ الحساب.</div>`;
   } else {
     const reversedEntries = vk.entries.slice().reverse();
+    // التراكم اليومي: لأول تسجيل في اليوم، المرجع هو آخر موضع في اليوم السابق (إن وُجد، وإلا «—»).
+    // لثاني تسجيل في اليوم نفسه فما بعده، المرجع دومًا أول تسجيل في نفس اليوم (يُحسب حتى لو كان أول تسجيل في اليوم بلا مرجع).
     const baseHizbByDate = {};
+    const firstEntryByDate = {};
     { let lastDate = null, lastHizb = null;
       for(const e of vk.entries){
-        if(e.date !== lastDate){ baseHizbByDate[e.date] = lastHizb; lastDate = e.date; }
+        if(e.date !== lastDate){ baseHizbByDate[e.date] = lastHizb; firstEntryByDate[e.date] = e; lastDate = e.date; }
         lastHizb = unitPosition(HIZB_BOUNDARIES, e.cumulative);
       }
     }
@@ -2093,13 +2126,16 @@ function render(){
         const eJuz = unitPosition(JUZ_BOUNDARIES, e.cumulative);
         const dateCell = idx===0 ? `<td rowspan="${g.items.length}">${dateDisplayLedger(g.date)}</td>` : '';
         const r1 = x => Math.round(x*10)/10;
-        const dailyCum = baseHizbByDate[e.date] == null ? null : r1(r1(eHizb) - r1(baseHizbByDate[e.date]));
+        const isFirstOfDay = firstEntryByDate[e.date] === e;
+        const dailyCum = isFirstOfDay
+          ? (baseHizbByDate[e.date] == null ? null : r1(r1(eHizb) - r1(baseHizbByDate[e.date])))
+          : r1(r1(eHizb) - r1(unitPosition(HIZB_BOUNDARIES, firstEntryByDate[e.date].cumulative)));
         const overQuota = dailyHizbQuota > 0 && dailyCum !== null && dailyCum > dailyHizbQuota + 0.05;
         const underQuota = dailyHizbQuota > 0 && dailyCum !== null && dailyCum < dailyHizbQuota - 0.05;
         return `<tr${overQuota ? ' class="over-quota"' : (underQuota ? ' class="under-quota"' : '')}>${dateCell}
         <td class="time-col">${e.time ? nd(e.time) : '—'}</td>
         <td class="hizb-col">${fmtSmart(eHizb)} / ${fmtSmart(idealHizbE)}</td>
-        <td class="hizb-col">${dailyCum === null ? '—' : fmtSmart(dailyCum)}</td>
+        <td class="hizb-col">${dailyCum === null ? '—' : fmtSmart(dailyCum)} / ${fmtSmart(dailyHizbQuota)}</td>
         <td>${SURAHS[e.surahIdx][0]} : ${nd(e.ayah)}</td>
         <td>${fmtSmart(eJuz)}</td>
         <td>${fmt(e.cumulative)} / ${fmt(TOTAL_AYAT)}</td>
@@ -2109,13 +2145,13 @@ function render(){
       }).join('');
     }).join('');
     return `<div class="table-scroll"><table class="ledger-table">
-      <thead><tr><th>التاريخ</th><th class="time-col">الوقت</th><th class="hizb-col">الأحزاب<br><small>(المقروء/المطلوب)</small></th><th class="hizb-col">التراكم<br><small>اليومي</small></th><th>الموضع الحالي</th><th>الأجزاء</th><th>الآيات</th><th>الصفحات</th><th>الحالة</th></tr></thead>
+      <thead><tr><th>التاريخ</th><th class="time-col">الوقت</th><th class="hizb-col">الأحزاب<br><small>(المقروء/المطلوب)</small></th><th class="hizb-col">التراكمي<br><small>اليومي/المطلوب</small></th><th>الموضع الحالي</th><th>الأجزاء</th><th>الآيات</th><th>الصفحات</th><th>الحالة</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
 
   };
-  const olderRounds = state.khatmas.map((k, i) => ({ k, i })).filter(o => o.i < viewIdx && khatmaName(o.k) === viewName);
+  const olderRounds = state.khatmas.map((k, i) => ({ k, i })).filter(o => o.i < ledgerViewIdx && khatmaName(o.k) === ledgerViewName);
   const olderRoundsHtml = olderRounds.slice().reverse().map(o => {
     const d = completedDaysTaken(o.k);
     const le = lastEntry(o.k);
@@ -2124,7 +2160,7 @@ function render(){
     const open = expandedRounds.has(o.i);
     return `<div class="old-round"><button type="button" class="ghost round-toggle" data-idx="${o.i}" aria-expanded="${open}">${open ? '−' : '+'}</button><span>${dateTextCompact(o.k.startDate)}${o.k.riwaya ? ' (' + escHtml(o.k.riwaya) + ')' : ''}</span>${stTag}</div>${open ? ledgerTableHtml(o.k) : ''}`;
   }).join('');
-  const ledgerRows = ledgerTableHtml(viewedKhatma) + olderRoundsHtml;
+  const ledgerRows = ledgerTableHtml(ledgerKhatma) + olderRoundsHtml;
 
   let historyRows = '';
   if(history.length === 0){
@@ -2265,7 +2301,7 @@ function render(){
       <div class="hero-head">
         <h2>تسجيل الموضع الحالي</h2>
         <div class="hero-status">${heroStatus}</div>
-        ${khatmaGroups.length > 1 ? `<select id="khatmaViewSelect" class="hero-khatma-select">${khatmaViewOptions}</select>` : ''}
+        ${khatmaGroups.length > 1 ? `<select id="khatmaViewSelect" class="hero-khatma-select" dir="rtl">${khatmaViewOptions}</select>` : ''}
       </div>
       <div class="row hero-row">
         <div class="field">
@@ -2331,12 +2367,12 @@ function render(){
     </section>
 
     <button type="button" class="view-toggle" id="viewToggleBtn" aria-expanded="${showKhatmaData}" aria-controls="mainContent">
-      <span>عرض بيانات ختمة${state.khatmas.length > 1 ? ` : ${escHtml(khatmaName(viewedKhatma))}` : ''}</span><span class="chev">▼</span>
+      <span>عرض بيانات ختمة${state.khatmas.length > 1 ? ` : ${escHtml(khatmaName(ledgerKhatma))}` : ''}</span><span class="chev">▼</span>
     </button>
 
     <div id="mainContent" ${showKhatmaData ? '' : 'hidden'}>
     <section>
-      <h2>سجل ${escHtml(khatmaName(viewedKhatma))}${viewedKhatma.riwaya ? ' (' + escHtml(viewedKhatma.riwaya) + ')' : ''} : ${dateDisplayInline(viewedKhatma.startDate)}</h2>
+      ${khatmaGroups.length > 1 ? `<div class="field" style="margin-bottom:10px;"><label for="ledgerNameSelect">السجل</label><select id="ledgerNameSelect" dir="rtl">${ledgerNameOptions}</select></div>` : `<h2>سجل ${escHtml(khatmaName(ledgerKhatma))}${ledgerIdxs.length > 1 ? ' ×' + nd(ledgerIdxs.length) : ''}${ledgerKhatma.riwaya ? ' (' + escHtml(ledgerKhatma.riwaya) + ')' : ''} : ${dateDisplayInline(ledgerKhatma.startDate)}</h2>`}
       ${ledgerRows}
 
       <div class="section-divider"></div>
@@ -2689,6 +2725,15 @@ function render(){
     });
   });
 
+  document.querySelectorAll('.view-ledger-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ledgerViewName = decodeURIComponent(btn.dataset.name);
+      showKhatmaData = true;
+      render();
+      setTimeout(()=>{ const h2 = document.querySelector('#mainContent h2'); if(h2) h2.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+    });
+  });
+
   document.querySelectorAll('.round-toggle').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const i = parseInt(btn.dataset.idx, 10);
@@ -2823,10 +2868,18 @@ function render(){
     render();
   });
 
+  if(document.getElementById('ledgerNameSelect')){
+    document.getElementById('ledgerNameSelect').addEventListener('change', (e) => {
+      ledgerViewName = e.target.value;
+      render();
+    });
+  }
+
   if(document.getElementById('khatmaViewSelect')){
     document.getElementById('khatmaViewSelect').addEventListener('change', (e)=>{
       const v = e.target.value;
       selectedKhatmaIdx = v === 'current' ? null : parseInt(v, 10);
+      ledgerViewName = khatmaName(state.khatmas[selectedKhatmaIdx === null ? state.khatmas.length - 1 : selectedKhatmaIdx]);
       render();
     });
   }
