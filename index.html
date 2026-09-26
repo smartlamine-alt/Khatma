@@ -1125,8 +1125,14 @@ function initGoogleAuthIfAvailable(){
         }
       });
       driveStatus = 'not-signed-in';
-      googleTokenClient.requestAccessToken({ prompt: '' });
-      setTimeout(settle, 1500); // لا جلسة سابقة: لن تُستدعى callback إطلاقًا، فنكمل بعد مهلة قصيرة
+      let wasLinked = false;
+      try{ wasLinked = localStorage.getItem('khatm-google-linked') === '1'; }catch(e){}
+      if(wasLinked){
+        googleTokenClient.requestAccessToken({ prompt: '' });
+        setTimeout(settle, 1500); // لا استجابة: نكمل بعد مهلة قصيرة بدل الانتظار إلى الأبد
+      } else {
+        settle(); // لم يُربط الحساب من قبل: لا محاولة صامتة إطلاقًا (تمامًا كما لا نحاول فتح ملف محلي لم يُربط قط)
+      }
     }catch(e){
       driveStatus = 'unavailable';
       resolve();
@@ -1145,6 +1151,7 @@ function signOutGoogle(){
   }
   googleAccessToken = null;
   driveFileId = null;
+  try{ localStorage.removeItem('khatm-google-linked'); }catch(e){}
   driveStatus = googleConfigured() ? 'not-signed-in' : 'unavailable';
   render();
 }
@@ -1160,6 +1167,7 @@ async function driveApiFetch(url, options={}){
 
 async function afterGoogleSignIn(){
   driveStatus = 'signed-in';
+  try{ localStorage.setItem('khatm-google-linked', '1'); }catch(e){}
   try{
     const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
     const listRes = await driveApiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`);
@@ -1339,7 +1347,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.79'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.81'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2259,7 +2267,7 @@ function render(){
     ` : ''}
 
     ${(fileLinkStatus !== 'db' && (driveStatus === 'not-signed-in' || driveStatus === 'signed-in')) ? `
-      <section class="status-banner status-onpace" ${showKhatmaData ? '' : 'hidden'} style="text-align:start; font-weight:500;">
+      <section class="status-banner status-onpace" style="text-align:start; font-weight:500;">
         <div style="margin-bottom:10px;">${driveStatus === 'signed-in' ? 'تعذّر الوصول إلى ملف الحفظ في Google Drive.' : 'احفظ بياناتك على Google Drive لمزامنتها تلقائيًا بين كل أجهزتك.'}</div>
         <div class="actions"><button class="primary" id="topGoogleSignInBtn">${driveStatus === 'signed-in' ? 'إعادة المحاولة' : 'تسجيل الدخول عبر Google'}</button></div>
       </section>
@@ -2408,28 +2416,26 @@ function render(){
           <input type="file" id="importFileInput" accept="application/json" style="display:none;">
         </div>
       ` : `
-        <div class="local-backup-row"><button type="button" class="ghost local-backup-toggle" id="localBackupToggleBtn" aria-expanded="${showLocalBackupOptions}">${showLocalBackupOptions ? '−' : '+'}</button><span>نسخة احتياطية إضافية (محلية)</span></div>
-        ${showLocalBackupOptions ? `<div style="margin-top:10px;">
-          ${fileLinkStatus === 'linked' ? `
-            <div class="filelink-status ${fileSyncInfo && !fileSyncInfo.ok ? 'warn' : 'ok'}">${fileSyncInfo && !fileSyncInfo.ok ? '⚠ تعذّر تحديث ملف JSON (آخر محاولة ' + nd(fileSyncInfo.time) + ') — تحقق من صلاحية الوصول.' : '✓ ملف JSON محدَّث' + (fileSyncInfo ? ' — آخر حفظ ' + nd(fileSyncInfo.time) : ' — يُحفَظ كل تحديث تلقائيًا')}</div>
-            <div class="note" style="margin-top:4px;">📁 الموضع: ${linkMode === 'file' ? 'الملف «' + escHtml(fileHandle ? fileHandle.name : '') + '»' : 'المجلد «' + escHtml(dirHandle ? dirHandle.name : '') + '» ← «' + FS_FILE_NAME + '»'} (المتصفح لا يكشف المسار الكامل)</div>
-            <div class="actions"><button class="ghost" id="unlinkBtn">إلغاء الربط</button></div>
-          ` : fileLinkStatus === 'unsupported' ? `
-            <div class="filelink-status">هذا المتصفح/الجهاز لا يدعم الربط المباشر بملف على القرص (متاح حاليًا على Chrome أو Edge على الحاسوب فقط). استخدم التنزيل والاستيراد اليدوي أدناه لنقل بياناتك.</div>
-          ` : `
-            <div class="actions">
-              ${supportsFilePicker() ? `<button class="primary" id="linkFileBtn">ربط ملف JSON موجود للحفظ التلقائي</button>` : ''}
-              ${supportsFileSystemAccess() ? `<button class="ghost" id="linkFolderBtn2">ربط مجلد بدلًا من ذلك</button>` : ''}
-            </div>
-            <div class="note" style="margin-top:8px;">💡 لمزامنة تلقائية بين أجهزتك عبر Google Drive: إن كان لديك تطبيق Google Drive مثبَّتًا على جهازك (Drive for Desktop)، اختر ملفًا أو مجلدًا داخل مجلد Drive نفسه بالزرّين أعلاه — سيُزامَن حفظك تلقائيًا مع كل أجهزتك المرتبطة بنفس حساب Drive، تمامًا كما يحدث على الهاتف.</div>
-          `}
-          <div class="note" style="margin-top:12px;">يمكنك أيضًا تنزيل نسخة يدويًا أو استيراد نسخة من جهاز آخر:</div>
-          <div class="actions" style="margin-top:8px;">
-            <button class="primary" id="exportBtn">تنزيل نسخة (JSON)</button>
-            <button class="ghost" id="importBtn">استيراد نسخة</button>
-            <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+        <div class="note" style="margin-bottom:8px;">نسخة احتياطية إضافية (محلية):</div>
+        ${fileLinkStatus === 'linked' ? `
+          <div class="filelink-status ${fileSyncInfo && !fileSyncInfo.ok ? 'warn' : 'ok'}">${fileSyncInfo && !fileSyncInfo.ok ? '⚠ تعذّر تحديث ملف JSON (آخر محاولة ' + nd(fileSyncInfo.time) + ') — تحقق من صلاحية الوصول.' : '✓ ملف JSON محدَّث' + (fileSyncInfo ? ' — آخر حفظ ' + nd(fileSyncInfo.time) : ' — يُحفَظ كل تحديث تلقائيًا')}</div>
+          <div class="note" style="margin-top:4px;">📁 الموضع: ${linkMode === 'file' ? 'الملف «' + escHtml(fileHandle ? fileHandle.name : '') + '»' : 'المجلد «' + escHtml(dirHandle ? dirHandle.name : '') + '» ← «' + FS_FILE_NAME + '»'} (المتصفح لا يكشف المسار الكامل)</div>
+          <div class="actions"><button class="ghost" id="unlinkBtn">إلغاء الربط</button></div>
+        ` : fileLinkStatus === 'unsupported' ? `
+          <div class="filelink-status">هذا المتصفح/الجهاز لا يدعم الربط المباشر بملف على القرص (متاح حاليًا على Chrome أو Edge على الحاسوب فقط). استخدم التنزيل والاستيراد اليدوي أدناه لنقل بياناتك.</div>
+        ` : `
+          <div class="actions">
+            ${supportsFilePicker() ? `<button class="primary" id="linkFileBtn">ربط ملف JSON موجود للحفظ التلقائي</button>` : ''}
+            ${supportsFileSystemAccess() ? `<button class="ghost" id="linkFolderBtn2">ربط مجلد بدلًا من ذلك</button>` : ''}
           </div>
-        </div>` : ''}
+          <div class="note" style="margin-top:8px;">💡 لمزامنة تلقائية بين أجهزتك عبر Google Drive: إن كان لديك تطبيق Google Drive مثبَّتًا على جهازك (Drive for Desktop)، اختر ملفًا أو مجلدًا داخل مجلد Drive نفسه بالزرّين أعلاه — سيُزامَن حفظك تلقائيًا مع كل أجهزتك المرتبطة بنفس حساب Drive، تمامًا كما يحدث على الهاتف.</div>
+        `}
+        <div class="note" style="margin-top:12px;">يمكنك أيضًا تنزيل نسخة يدويًا أو استيراد نسخة من جهاز آخر:</div>
+        <div class="actions" style="margin-top:8px;">
+          <button class="primary" id="exportBtn">تنزيل نسخة (JSON)</button>
+          <button class="ghost" id="importBtn">استيراد نسخة</button>
+          <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+        </div>
       `}
     </section>
   `;
