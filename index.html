@@ -1347,7 +1347,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.81'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.82'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2266,13 +2266,6 @@ function render(){
       </section>
     ` : ''}
 
-    ${(fileLinkStatus !== 'db' && (driveStatus === 'not-signed-in' || driveStatus === 'signed-in')) ? `
-      <section class="status-banner status-onpace" style="text-align:start; font-weight:500;">
-        <div style="margin-bottom:10px;">${driveStatus === 'signed-in' ? 'تعذّر الوصول إلى ملف الحفظ في Google Drive.' : 'احفظ بياناتك على Google Drive لمزامنتها تلقائيًا بين كل أجهزتك.'}</div>
-        <div class="actions"><button class="primary" id="topGoogleSignInBtn">${driveStatus === 'signed-in' ? 'إعادة المحاولة' : 'تسجيل الدخول عبر Google'}</button></div>
-      </section>
-    ` : ''}
-
     <section class="hero compact" id="heroSection">
       <div class="hero-head">
         <h2>تسجيل الموضع الحالي</h2>
@@ -2445,9 +2438,6 @@ function render(){
   }
   if(document.getElementById('topLinkFileBtn')){
     document.getElementById('topLinkFileBtn').addEventListener('click', linkExistingFile);
-  }
-  if(document.getElementById('topGoogleSignInBtn')){
-    document.getElementById('topGoogleSignInBtn').addEventListener('click', signInWithGoogle);
   }
   if(document.getElementById('linkFileBtn')){
     document.getElementById('linkFileBtn').addEventListener('click', linkExistingFile);
