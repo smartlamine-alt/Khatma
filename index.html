@@ -609,6 +609,9 @@ for(let i=0;i<30;i++){
 }
 HIZB_BOUNDARIES.push(TOTAL_AYAT);
 
+// موضع الحزب يُشتقّ من موضع الجزء مباشرة (حزب = جزء × 2) بدل جدول حدود مستقل، لضمان توافق الفرق بينهما تمامًا دومًا.
+function hizbFromJuz(p){ return unitPosition(JUZ_BOUNDARIES, p) * 2; }
+
 function unitPosition(boundaries, p){
   const n = boundaries.length - 1;
   if(p <= boundaries[0]) return 0;
@@ -1348,7 +1351,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.86'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.88'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1573,7 +1576,7 @@ function computeStatus(khatma){
   const overdue = !finished && duration > 0 && dayIndex > duration;
 
   const juzPos = unitPosition(JUZ_BOUNDARIES, progress);
-  const hizbPos = unitPosition(HIZB_BOUNDARIES, progress);
+  const hizbPos = hizbFromJuz(progress);
 
   // الوتيرة والتقدّم/التأخر يُحسبان بناءً على الأحزاب (60 حزبًا) لا الآيات مباشرة،
   // حتى تعكس المعدل اليومي المطلوب: 60 ÷ عدد الأيام حزبًا في اليوم.
@@ -2071,7 +2074,7 @@ function render(){
     { let lastDate = null, lastHizb = null;
       for(const e of vk.entries){
         if(e.date !== lastDate){ baseHizbByDate[e.date] = lastHizb; firstEntryByDate[e.date] = e; lastDate = e.date; }
-        lastHizb = unitPosition(HIZB_BOUNDARIES, e.cumulative);
+        lastHizb = hizbFromJuz(e.cumulative);
       }
     }
     const dailyHizbQuota = vk.durationDays > 0 ? 60/vk.durationDays : 0;
@@ -2086,7 +2089,7 @@ function render(){
     const rows = groups.map(g => {
       return g.items.map((e, idx)=>{
         const dIdx = Math.min(Math.max(daysBetween(vk.startDate, e.date)+1,1), 9999);
-        const eHizb = unitPosition(HIZB_BOUNDARIES, e.cumulative);
+        const eHizb = hizbFromJuz(e.cumulative);
         const hizbPerDayE = vk.durationDays > 0 ? 60/vk.durationDays : 0;
         const idealHizbE = Math.min(hizbPerDayE*dIdx, 60);
         const dHizb = eHizb - idealHizbE;
@@ -2096,10 +2099,13 @@ function render(){
         const eJuz = unitPosition(JUZ_BOUNDARIES, e.cumulative);
         const dateCell = idx===0 ? `<td rowspan="${g.items.length}">${dateDisplayLedger(g.date)}</td>` : '';
         const r1 = x => Math.round(x*10)/10;
+        // إن وُجد يوم سابق: كل تسجيلات اليوم (الأول وما بعده) تُقارَن بآخر موضع في اليوم السابق (تراكم اليوم كاملًا).
+        // إن لم يوجد يوم سابق (أول يوم في البيانات): يُقارَن ثاني تسجيل فما بعده بأول تسجيل في نفس اليوم بدل «—».
+        const hasPrevDay = baseHizbByDate[e.date] != null;
         const isFirstOfDay = firstEntryByDate[e.date] === e;
-        const dailyCum = isFirstOfDay
-          ? (baseHizbByDate[e.date] == null ? null : r1(r1(eHizb) - r1(baseHizbByDate[e.date])))
-          : r1(r1(eHizb) - r1(unitPosition(HIZB_BOUNDARIES, firstEntryByDate[e.date].cumulative)));
+        const dailyCum = hasPrevDay
+          ? r1(r1(eHizb) - r1(baseHizbByDate[e.date]))
+          : (isFirstOfDay ? null : r1(r1(eHizb) - r1(hizbFromJuz(firstEntryByDate[e.date].cumulative))));
         const overQuota = dailyHizbQuota > 0 && dailyCum !== null && dailyCum > dailyHizbQuota + 0.05;
         const underQuota = dailyHizbQuota > 0 && dailyCum !== null && dailyCum < dailyHizbQuota - 0.05;
         return `<tr${overQuota ? ' class="over-quota"' : (underQuota ? ' class="under-quota"' : '')}>${dateCell}
