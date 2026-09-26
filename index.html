@@ -1093,6 +1093,7 @@ async function resolveFileInDir(){
 // -مثل https://smartlamine-alt.github.io- إلى "Authorized JavaScript origins").
 const GOOGLE_CLIENT_ID = '1022346708886-eq9835r7llv9iq45eb29eo9kmrqo7n0d.apps.googleusercontent.com';
 const DRIVE_FILE_NAME = 'khatm-data.json';
+const DRIVE_FOLDER_NAME = 'ختمتي';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'; // نطاق محدود بالملفات التي ينشئها التطبيق نفسه فقط
 
 let googleTokenClient = null;
@@ -1169,21 +1170,43 @@ async function driveApiFetch(url, options={}){
   return res;
 }
 
+// يبحث عن مجلد «ختمتي» في Drive أو ينشئه إن لم يوجد، ويعيد معرّفه.
+async function ensureDriveFolder(){
+  const q = encodeURIComponent(`name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const listRes = await driveApiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`);
+  const listData = await listRes.json();
+  if(listData.files && listData.files.length) return listData.files[0].id;
+  const createRes = await driveApiFetch('https://www.googleapis.com/drive/v3/files', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType:'application/vnd.google-apps.folder' })
+  });
+  const created = await createRes.json();
+  return created.id;
+}
+
 async function afterGoogleSignIn(){
   driveStatus = 'signed-in';
   try{ localStorage.setItem('khatm-google-linked', '1'); }catch(e){}
   try{
+    const folderId = await ensureDriveFolder();
     const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
-    const listRes = await driveApiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`);
+    const listRes = await driveApiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,parents)&spaces=drive`);
     const listData = await listRes.json();
     if(listData.files && listData.files.length){
-      driveFileId = listData.files[0].id;
+      const f = listData.files[0];
+      driveFileId = f.id;
+      if(!f.parents || !f.parents.includes(folderId)){
+        // نقل ملف قديم (كان في الجذر أو مكان آخر من إصدار سابق) إلى مجلد «ختمتي».
+        const oldParents = (f.parents || []).join(',');
+        await driveApiFetch(`https://www.googleapis.com/drive/v3/files/${f.id}?addParents=${folderId}${oldParents ? '&removeParents=' + oldParents : ''}`, { method: 'PATCH' });
+      }
       await driveLoad();
     } else {
       const createRes = await driveApiFetch('https://www.googleapis.com/drive/v3/files', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name: DRIVE_FILE_NAME, mimeType:'application/json' })
+        body: JSON.stringify({ name: DRIVE_FILE_NAME, mimeType:'application/json', parents:[folderId] })
       });
       const created = await createRes.json();
       driveFileId = created.id;
@@ -1351,7 +1374,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.88'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.89'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
