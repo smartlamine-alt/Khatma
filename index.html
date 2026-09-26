@@ -1102,26 +1102,36 @@ function googleConfigured(){
 }
 
 function initGoogleAuthIfAvailable(){
-  if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2 || !googleConfigured()){
-    driveStatus = 'unavailable';
-    return;
-  }
-  try{
-    googleTokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: DRIVE_SCOPE,
-      callback: async (resp)=>{
-        if(resp && resp.access_token){
-          googleAccessToken = resp.access_token;
-          await afterGoogleSignIn();
+  // تُعيد Promise يُحسم بعد محاولة تسجيل الدخول الصامت (نجاحًا أو فشلاً)، ليعرف الاستدعاء
+  // ما إذا كان الحساب مرتبطًا فعلًا بـ Drive قبل عرض أي طلب ربط.
+  return new Promise((resolve) => {
+    if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2 || !googleConfigured()){
+      driveStatus = 'unavailable';
+      resolve();
+      return;
+    }
+    try{
+      let settled = false;
+      const settle = () => { if(!settled){ settled = true; resolve(); } };
+      googleTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: DRIVE_SCOPE,
+        callback: async (resp)=>{
+          if(resp && resp.access_token){
+            googleAccessToken = resp.access_token;
+            await afterGoogleSignIn();
+          }
+          settle();
         }
-      }
-    });
-    driveStatus = 'not-signed-in';
-    googleTokenClient.requestAccessToken({ prompt: '' });
-  }catch(e){
-    driveStatus = 'unavailable';
-  }
+      });
+      driveStatus = 'not-signed-in';
+      googleTokenClient.requestAccessToken({ prompt: '' });
+      setTimeout(settle, 1500); // لا جلسة سابقة: لن تُستدعى callback إطلاقًا، فنكمل بعد مهلة قصيرة
+    }catch(e){
+      driveStatus = 'unavailable';
+      resolve();
+    }
+  });
 }
 
 function signInWithGoogle(){
@@ -1501,73 +1511,7 @@ async function loadState(){
   if(changed1 || changed2){ await saveState(); }
   }
   render();
-  maybeShowStartupLinkPrompt();
-  initGoogleAuthIfAvailable();
-}
-
-// عند عدم وجود ملف/مجلد مرتبط، نطلب ذلك قبل الاستخدام بدل تركه صامتًا (يُعرض مرة واحدة لكل جلسة).
-let startupPromptShown = false;
-function maybeShowStartupLinkPrompt(){
-  if(startupPromptShown) return;
-  if(fileLinkStatus === 'db' || fileLinkStatus === 'linked') return; // نسخة احتياطية فعّالة أصلًا
-  if(driveStatus === 'linked') return; // اتصال Google Drive قائم ودائم؛ لا حاجة للطلب
-  try{ if(localStorage.getItem('khatm-backup-prompt-dismissed') === '1') return; }catch(e){}
-  startupPromptShown = true;
-  const supported = supportsFileSystemAccess() || supportsFilePicker();
-  const googleAvailable = driveStatus !== 'unavailable';
-  const dim = () => { [...app.children].forEach(c => { c.setAttribute('inert', ''); c.classList.add('perm-dim'); }); };
-  const undim = () => { [...app.children].forEach(c => { c.removeAttribute('inert'); c.classList.remove('perm-dim'); }); };
-  dim();
-  const bd = document.createElement('div');
-  bd.className = 'dlg-backdrop';
-  const close = () => { bd.remove(); undim(); };
-  const dismissForGood = () => {
-    try{ localStorage.setItem('khatm-backup-prompt-dismissed', '1'); }catch(e){}
-    close();
-  };
-  const draw = (hint) => {
-    const googleBtn = googleAvailable ? `<button type="button" class="primary" id="startupGoogle">تسجيل الدخول عبر Google</button>` : '';
-    const localBtns = (supported && !googleAvailable) ? `
-          ${supportsFilePicker() ? '<button type="button" class="ghost" id="startupFile">ربط ملف موجود</button>' : ''}
-          ${supportsFileSystemAccess() ? '<button type="button" class="primary" id="startupFolder">اختيار مجلد</button>' : ''}` : '';
-    bd.innerHTML = (supported || googleAvailable) ? `
-      <div class="tuto-card" role="alertdialog" aria-modal="true">
-        <div class="tuto-top"><span class="tuto-kicker">قبل البدء</span></div>
-        <h3>${googleAvailable ? 'احفظ بياناتك على Google Drive' : 'احفظ بياناتك 💾'}</h3>
-        <p>لا بد من طريقة لحفظ بياناتك قبل المتابعة، وإلا فقد تُفقد عند مسح بيانات المتصفح.${googleAvailable ? ' الأسهل: تسجيل الدخول عبر Google (حفظ ومزامنة تلقائيان دائمان).' : ''}${hint ? '<br><b>' + hint + '</b>' : ''}</p>
-        <div class="dlg-actions" style="flex-wrap:wrap;">${googleBtn}${localBtns}</div>
-        <label class="note" style="display:flex; align-items:center; gap:6px; margin-top:12px; cursor:pointer;"><input type="checkbox" id="startupDismissChk"> لا تسأل مرة أخرى</label>
-        <div class="dlg-actions" style="margin-top:6px;"><button type="button" class="ghost" id="startupLater">لاحقًا</button></div>
-      </div>` : `
-      <div class="tuto-card" role="alertdialog" aria-modal="true">
-        <div class="tuto-top"><span class="tuto-kicker">قبل البدء</span></div>
-        <h3>استيراد نسخة سابقة؟ 📄</h3>
-        <p>هذا المتصفح لا يدعم الربط التلقائي بملف على القرص (متاح على Chrome أو Edge). يمكنك استيراد نسخة JSON محفوظة سابقًا الآن، أو المتابعة والتذكّر بتنزيل نسخة يدويًا لاحقًا من قسم الحفظ.</p>
-        <div class="dlg-actions"><button type="button" class="primary" id="startupImport">استيراد نسخة JSON</button></div>
-        <label class="note" style="display:flex; align-items:center; gap:6px; margin-top:12px; cursor:pointer;"><input type="checkbox" id="startupDismissChk"> لا تسأل مرة أخرى</label>
-        <div class="dlg-actions" style="margin-top:6px;"><button type="button" class="ghost" id="startupLater">لاحقًا</button></div>
-      </div>`;
-    const laterBtn = bd.querySelector('#startupLater');
-    laterBtn.addEventListener('click', () => {
-      if(bd.querySelector('#startupDismissChk').checked) dismissForGood(); else close();
-    });
-    const gBtn = bd.querySelector('#startupGoogle');
-    if(gBtn) gBtn.addEventListener('click', () => { close(); signInWithGoogle(); });
-    const fBtn = bd.querySelector('#startupFile');
-    if(fBtn) fBtn.addEventListener('click', async () => {
-      await linkExistingFile();
-      if(fileLinkStatus === 'linked') close(); else draw('لم يكتمل اختيار الملف، حاول مجددًا.');
-    });
-    const dBtn = bd.querySelector('#startupFolder');
-    if(dBtn) dBtn.addEventListener('click', async () => {
-      await linkFolder();
-      if(fileLinkStatus === 'linked') close(); else draw('لم يكتمل اختيار المجلد، حاول مجددًا.');
-    });
-    const iBtn = bd.querySelector('#startupImport');
-    if(iBtn) iBtn.addEventListener('click', () => { close(); const inp = document.getElementById('importFileInput'); if(inp) inp.click(); });
-  };
-  draw();
-  document.body.appendChild(bd);
+  await initGoogleAuthIfAvailable();
 }
 
 async function saveState(){
@@ -2314,6 +2258,13 @@ function render(){
       </section>
     ` : ''}
 
+    ${(fileLinkStatus !== 'db' && (driveStatus === 'not-signed-in' || driveStatus === 'signed-in')) ? `
+      <section class="status-banner status-onpace" ${showKhatmaData ? '' : 'hidden'} style="text-align:start; font-weight:500;">
+        <div style="margin-bottom:10px;">${driveStatus === 'signed-in' ? 'تعذّر الوصول إلى ملف الحفظ في Google Drive.' : 'احفظ بياناتك على Google Drive لمزامنتها تلقائيًا بين كل أجهزتك.'}</div>
+        <div class="actions"><button class="primary" id="topGoogleSignInBtn">${driveStatus === 'signed-in' ? 'إعادة المحاولة' : 'تسجيل الدخول عبر Google'}</button></div>
+      </section>
+    ` : ''}
+
     <section class="hero compact" id="heroSection">
       <div class="hero-head">
         <h2>تسجيل الموضع الحالي</h2>
@@ -2486,8 +2437,11 @@ function render(){
   if(fileLinkStatus === 'not-linked' && document.getElementById('topLinkFolderBtn')){
     document.getElementById('topLinkFolderBtn').addEventListener('click', linkFolder);
   }
-  if(fileLinkStatus === 'not-linked' && document.getElementById('topLinkFileBtn')){
+  if(document.getElementById('topLinkFileBtn')){
     document.getElementById('topLinkFileBtn').addEventListener('click', linkExistingFile);
+  }
+  if(document.getElementById('topGoogleSignInBtn')){
+    document.getElementById('topGoogleSignInBtn').addEventListener('click', signInWithGoogle);
   }
   if(document.getElementById('linkFileBtn')){
     document.getElementById('linkFileBtn').addEventListener('click', linkExistingFile);
