@@ -170,6 +170,8 @@
 
   .note.center{ text-align:center; }
   select, option{ direction: rtl; text-align: right; }
+  .local-backup-row{ display:flex; align-items:center; gap:8px; margin:16px 0; }
+  .local-backup-row span{ font-size:13px; color:var(--parchment-dim); }
   .surah-picker-btn{ width:100%; text-align:start; background: var(--panel-2); border: 1px solid var(--hairline); color: var(--parchment); padding: 10px 12px; border-radius: 8px; font-family:'Tajawal', sans-serif; font-size: 15px; cursor:pointer; }
   .surah-picker-btn:disabled{ opacity:.5; cursor:not-allowed; }
   .surah-picker-btn:focus{ outline: 2px solid var(--gold-dim); outline-offset: 1px; }
@@ -959,7 +961,9 @@ let state = null;
 let showNewKhatmaForm = false;
 const TRAINING_URL = 'https://www.youtube.com/watch?v=4SgFWJzsbCY&list=PLNxF6yrM2mUQ'; // رابط قائمة تشغيل الدورة (يوتيوب)
 let surahPickerState = { min: 0, current: 0 };
-let ledgerViewName = null; // اسم الختمة المعروضة في «السجل» — يبقى ثابتًا حتى لو حُذفت دورتها الجارية، ما دامت دورة أخرى بنفس الاسم موجودة
+let ledgerViewName = null;
+let showLocalBackupOptions = false; // طيّ خيارات الربط المحلي والتصدير اليدوي خلف زر «+ نسخة احتياطية إضافية»
+const DRIVE_ICON_SVG = '<svg viewBox="0 0 87.3 78" width="18" height="18" aria-hidden="true" style="vertical-align:-3px;"><path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/><path d="M43.65 25l-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0-1.2 4.5h27.5z" fill="#00ac47"/><path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/><path d="M43.65 25l13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/><path d="M59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/><path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/></svg>'; // اسم الختمة المعروضة في «السجل» — يبقى ثابتًا حتى لو حُذفت دورتها الجارية، ما دامت دورة أخرى بنفس الاسم موجودة
 let currentView = 'khatma'; // 'khatma' | 'library'
 let expandedRounds = new Set(); // فهارس الدورات السابقة المفتوحة في السجل
 let selectedKhatmaIdx = null; // null = الختمة الحالية (الأحدث)
@@ -1325,7 +1329,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.72'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.78'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1505,37 +1509,50 @@ async function loadState(){
 let startupPromptShown = false;
 function maybeShowStartupLinkPrompt(){
   if(startupPromptShown) return;
-  if(fileLinkStatus !== 'not-linked' && fileLinkStatus !== 'unsupported') return;
+  if(fileLinkStatus === 'db' || fileLinkStatus === 'linked') return; // نسخة احتياطية فعّالة أصلًا
+  if(driveStatus === 'linked') return; // اتصال Google Drive قائم ودائم؛ لا حاجة للطلب
+  try{ if(localStorage.getItem('khatm-backup-prompt-dismissed') === '1') return; }catch(e){}
   startupPromptShown = true;
   const supported = supportsFileSystemAccess() || supportsFilePicker();
+  const googleAvailable = driveStatus !== 'unavailable';
   const dim = () => { [...app.children].forEach(c => { c.setAttribute('inert', ''); c.classList.add('perm-dim'); }); };
   const undim = () => { [...app.children].forEach(c => { c.removeAttribute('inert'); c.classList.remove('perm-dim'); }); };
   dim();
   const bd = document.createElement('div');
   bd.className = 'dlg-backdrop';
   const close = () => { bd.remove(); undim(); };
+  const dismissForGood = () => {
+    try{ localStorage.setItem('khatm-backup-prompt-dismissed', '1'); }catch(e){}
+    close();
+  };
   const draw = (hint) => {
-    bd.innerHTML = supported ? `
+    const googleBtn = googleAvailable ? `<button type="button" class="primary" id="startupGoogle">تسجيل الدخول عبر Google</button>` : '';
+    const localBtns = (supported && !googleAvailable) ? `
+          ${supportsFilePicker() ? '<button type="button" class="ghost" id="startupFile">ربط ملف موجود</button>' : ''}
+          ${supportsFileSystemAccess() ? '<button type="button" class="primary" id="startupFolder">اختيار مجلد</button>' : ''}` : '';
+    bd.innerHTML = (supported || googleAvailable) ? `
       <div class="tuto-card" role="alertdialog" aria-modal="true">
         <div class="tuto-top"><span class="tuto-kicker">قبل البدء</span></div>
-        <h3>اربط ملف الحفظ 💾</h3>
-        <p>لا بد من ربط مجلد أو ملف JSON لحفظ بياناتك تلقائيًا قبل المتابعة، وإلا فقد تُفقد بياناتك عند مسح بيانات المتصفح.<br><span style="color:#E5322D; font-weight:600;">اختيار مجلد من أجل إنشاء ملف حفظ البيانات</span>${hint ? '<br><b>' + hint + '</b>' : ''}</p>
-        <div class="dlg-actions" style="flex-wrap:wrap;">
-          ${supportsFilePicker() ? '<button type="button" class="ghost" id="startupFile">ربط ملف موجود</button>' : ''}
-          ${supportsFileSystemAccess() ? '<button type="button" class="primary" id="startupFolder">اختيار مجلد</button>' : ''}
-        </div>
+        <h3>${googleAvailable ? 'احفظ بياناتك على Google Drive' : 'احفظ بياناتك 💾'}</h3>
+        <p>لا بد من طريقة لحفظ بياناتك قبل المتابعة، وإلا فقد تُفقد عند مسح بيانات المتصفح.${googleAvailable ? ' الأسهل: تسجيل الدخول عبر Google (حفظ ومزامنة تلقائيان دائمان).' : ''}${hint ? '<br><b>' + hint + '</b>' : ''}</p>
+        <div class="dlg-actions" style="flex-wrap:wrap;">${googleBtn}${localBtns}</div>
+        <label class="note" style="display:flex; align-items:center; gap:6px; margin-top:12px; cursor:pointer;"><input type="checkbox" id="startupDismissChk"> لا تسأل مرة أخرى</label>
+        <div class="dlg-actions" style="margin-top:6px;"><button type="button" class="ghost" id="startupLater">لاحقًا</button></div>
       </div>` : `
       <div class="tuto-card" role="alertdialog" aria-modal="true">
         <div class="tuto-top"><span class="tuto-kicker">قبل البدء</span></div>
         <h3>استيراد نسخة سابقة؟ 📄</h3>
-        <p>هذا المتصفح لا يدعم الربط التلقائي بملف على القرص (متاح على Chrome أو Edge). يمكنك استيراد نسخة JSON محفوظة سابقًا الآن، أو المتابعة والتذكّر بتنزيل نسخة يدويًا لاحقًا من «النسخة الاحتياطية المحلية».</p>
-        <div class="dlg-actions">
-          <button type="button" class="ghost" id="startupSkip">متابعة بدون استيراد</button>
-          <button type="button" class="primary" id="startupImport">استيراد نسخة JSON</button>
-        </div>
+        <p>هذا المتصفح لا يدعم الربط التلقائي بملف على القرص (متاح على Chrome أو Edge). يمكنك استيراد نسخة JSON محفوظة سابقًا الآن، أو المتابعة والتذكّر بتنزيل نسخة يدويًا لاحقًا من قسم الحفظ.</p>
+        <div class="dlg-actions"><button type="button" class="primary" id="startupImport">استيراد نسخة JSON</button></div>
+        <label class="note" style="display:flex; align-items:center; gap:6px; margin-top:12px; cursor:pointer;"><input type="checkbox" id="startupDismissChk"> لا تسأل مرة أخرى</label>
+        <div class="dlg-actions" style="margin-top:6px;"><button type="button" class="ghost" id="startupLater">لاحقًا</button></div>
       </div>`;
-    const skip = bd.querySelector('#startupSkip');
-    if(skip) skip.addEventListener('click', close);
+    const laterBtn = bd.querySelector('#startupLater');
+    laterBtn.addEventListener('click', () => {
+      if(bd.querySelector('#startupDismissChk').checked) dismissForGood(); else close();
+    });
+    const gBtn = bd.querySelector('#startupGoogle');
+    if(gBtn) gBtn.addEventListener('click', () => { close(); signInWithGoogle(); });
     const fBtn = bd.querySelector('#startupFile');
     if(fBtn) fBtn.addEventListener('click', async () => {
       await linkExistingFile();
@@ -2417,7 +2434,7 @@ function render(){
     </div>
 
     <section class="backup-section">
-      <h2>${fileLinkStatus === 'db' ? 'المزامنة' : 'نسخة احتياطية محلية'}</h2>
+      <h2>${fileLinkStatus === 'db' ? 'المزامنة' : (driveStatus !== 'unavailable' ? DRIVE_ICON_SVG + ' حفظ على Google Drive' : 'نسخة احتياطية محلية')}</h2>
 
       ${driveStatus === 'linked' ? `
         <div class="filelink-status ok">✓ متصل بـ Google Drive — يُحفَظ كل تحديث تلقائيًا في ملف «${DRIVE_FILE_NAME}» في درايف حسابك، ويمكنك فتحه من أي جهاز.</div>
@@ -2433,26 +2450,36 @@ function render(){
 
       ${fileLinkStatus === 'db' ? `
         <div class="filelink-status ok">✓ متصل بقاعدة بيانات حسابك على Claude — تُحفَظ بياناتك تلقائيًا وتتزامن على أي جهاز تفتح منه هذا الرابط وأنت مسجّل الدخول.</div>
-      ` : fileLinkStatus === 'linked' ? `
-        <div class="filelink-status ${fileSyncInfo && !fileSyncInfo.ok ? 'warn' : 'ok'}">${fileSyncInfo && !fileSyncInfo.ok ? '⚠ تعذّر تحديث ملف JSON (آخر محاولة ' + nd(fileSyncInfo.time) + ') — تحقق من صلاحية الوصول.' : '✓ ملف JSON محدَّث' + (fileSyncInfo ? ' — آخر حفظ ' + nd(fileSyncInfo.time) : ' — يُحفَظ كل تحديث تلقائيًا')}</div>
-        <div class="note" style="margin-top:4px;">📁 الموضع: ${linkMode === 'file' ? 'الملف «' + escHtml(fileHandle ? fileHandle.name : '') + '»' : 'المجلد «' + escHtml(dirHandle ? dirHandle.name : '') + '» ← «' + FS_FILE_NAME + '»'} (المتصفح لا يكشف المسار الكامل)</div>
-        <div class="actions"><button class="ghost" id="unlinkBtn">إلغاء الربط</button></div>
-      ` : fileLinkStatus === 'unsupported' ? `
-        <div class="filelink-status">هذا المتصفح/الجهاز لا يدعم الربط المباشر بملف على القرص (متاح حاليًا على Chrome أو Edge على الحاسوب فقط). استخدم التنزيل والاستيراد اليدوي أدناه لنقل بياناتك.</div>
-      ` : `
-        <div class="actions">
-          ${supportsFilePicker() ? `<button class="primary" id="linkFileBtn">ربط ملف JSON موجود للحفظ التلقائي</button>` : ''}
-          ${supportsFileSystemAccess() ? `<button class="ghost" id="linkFolderBtn2">ربط مجلد بدلًا من ذلك</button>` : ''}
+        <div class="note" style="margin-top:12px;">يمكنك أيضًا تنزيل نسخة احتياطية يدويًا:</div>
+        <div class="actions" style="margin-top:8px;">
+          <button class="primary" id="exportBtn">تنزيل نسخة (JSON)</button>
+          <button class="ghost" id="importBtn">استيراد نسخة</button>
+          <input type="file" id="importFileInput" accept="application/json" style="display:none;">
         </div>
-        <div class="note" style="margin-top:8px;">💡 لمزامنة تلقائية بين أجهزتك عبر Google Drive: إن كان لديك تطبيق Google Drive مثبَّتًا على جهازك (Drive for Desktop)، اختر ملفًا أو مجلدًا داخل مجلد Drive نفسه بالزرّين أعلاه — سيُزامَن حفظك تلقائيًا مع كل أجهزتك المرتبطة بنفس حساب Drive، تمامًا كما يحدث على الهاتف.</div>
+      ` : `
+        <div class="local-backup-row"><button type="button" class="ghost local-backup-toggle" id="localBackupToggleBtn" aria-expanded="${showLocalBackupOptions}">${showLocalBackupOptions ? '−' : '+'}</button><span>نسخة احتياطية إضافية (محلية)</span></div>
+        ${showLocalBackupOptions ? `<div style="margin-top:10px;">
+          ${fileLinkStatus === 'linked' ? `
+            <div class="filelink-status ${fileSyncInfo && !fileSyncInfo.ok ? 'warn' : 'ok'}">${fileSyncInfo && !fileSyncInfo.ok ? '⚠ تعذّر تحديث ملف JSON (آخر محاولة ' + nd(fileSyncInfo.time) + ') — تحقق من صلاحية الوصول.' : '✓ ملف JSON محدَّث' + (fileSyncInfo ? ' — آخر حفظ ' + nd(fileSyncInfo.time) : ' — يُحفَظ كل تحديث تلقائيًا')}</div>
+            <div class="note" style="margin-top:4px;">📁 الموضع: ${linkMode === 'file' ? 'الملف «' + escHtml(fileHandle ? fileHandle.name : '') + '»' : 'المجلد «' + escHtml(dirHandle ? dirHandle.name : '') + '» ← «' + FS_FILE_NAME + '»'} (المتصفح لا يكشف المسار الكامل)</div>
+            <div class="actions"><button class="ghost" id="unlinkBtn">إلغاء الربط</button></div>
+          ` : fileLinkStatus === 'unsupported' ? `
+            <div class="filelink-status">هذا المتصفح/الجهاز لا يدعم الربط المباشر بملف على القرص (متاح حاليًا على Chrome أو Edge على الحاسوب فقط). استخدم التنزيل والاستيراد اليدوي أدناه لنقل بياناتك.</div>
+          ` : `
+            <div class="actions">
+              ${supportsFilePicker() ? `<button class="primary" id="linkFileBtn">ربط ملف JSON موجود للحفظ التلقائي</button>` : ''}
+              ${supportsFileSystemAccess() ? `<button class="ghost" id="linkFolderBtn2">ربط مجلد بدلًا من ذلك</button>` : ''}
+            </div>
+            <div class="note" style="margin-top:8px;">💡 لمزامنة تلقائية بين أجهزتك عبر Google Drive: إن كان لديك تطبيق Google Drive مثبَّتًا على جهازك (Drive for Desktop)، اختر ملفًا أو مجلدًا داخل مجلد Drive نفسه بالزرّين أعلاه — سيُزامَن حفظك تلقائيًا مع كل أجهزتك المرتبطة بنفس حساب Drive، تمامًا كما يحدث على الهاتف.</div>
+          `}
+          <div class="note" style="margin-top:12px;">يمكنك أيضًا تنزيل نسخة يدويًا أو استيراد نسخة من جهاز آخر:</div>
+          <div class="actions" style="margin-top:8px;">
+            <button class="primary" id="exportBtn">تنزيل نسخة (JSON)</button>
+            <button class="ghost" id="importBtn">استيراد نسخة</button>
+            <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+          </div>
+        </div>` : ''}
       `}
-
-      <div class="note" style="margin-top:${fileLinkStatus==='unsupported' || fileLinkStatus==='not-linked' ?'0':'12px'};">${fileLinkStatus === 'db' ? 'يمكنك أيضًا تنزيل نسخة احتياطية يدويًا:' : 'يمكنك أيضًا تنزيل نسخة يدويًا أو استيراد نسخة من جهاز آخر:'}</div>
-      <div class="actions" style="margin-top:8px;">
-        <button class="primary" id="exportBtn">تنزيل نسخة (JSON)</button>
-        <button class="ghost" id="importBtn">استيراد نسخة</button>
-        <input type="file" id="importFileInput" accept="application/json" style="display:none;">
-      </div>
     </section>
   `;
 
@@ -2888,19 +2915,30 @@ function render(){
     document.getElementById('unlinkBtn').addEventListener('click', unlinkFile);
   }
 
+  if(document.getElementById('localBackupToggleBtn')){
+    document.getElementById('localBackupToggleBtn').addEventListener('click', ()=>{
+      showLocalBackupOptions = !showLocalBackupOptions;
+      render();
+    });
+  }
   const googleSignInBtn = document.getElementById('googleSignInBtn');
   if(googleSignInBtn) googleSignInBtn.addEventListener('click', signInWithGoogle);
   const googleSignOutBtn = document.getElementById('googleSignOutBtn');
   if(googleSignOutBtn) googleSignOutBtn.addEventListener('click', signOutGoogle);
 
-  document.getElementById('exportBtn').addEventListener('click', async ()=>{
-    await downloadJSON('khatm-' + todayStr() + '.json', JSON.stringify(state, null, 2));
-  });
+  if(document.getElementById('exportBtn')){
+    document.getElementById('exportBtn').addEventListener('click', async ()=>{
+      await downloadJSON('khatm-' + todayStr() + '.json', JSON.stringify(state, null, 2));
+    });
+  }
 
-  document.getElementById('importBtn').addEventListener('click', ()=>{
-    document.getElementById('importFileInput').click();
-  });
+  if(document.getElementById('importBtn')){
+    document.getElementById('importBtn').addEventListener('click', ()=>{
+      document.getElementById('importFileInput').click();
+    });
+  }
 
+  if(document.getElementById('importFileInput'))
   document.getElementById('importFileInput').addEventListener('change', (e)=>{
     const file = e.target.files[0];
     if(!file) return;
