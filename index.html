@@ -1378,7 +1378,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.94'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.95'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2964,6 +2964,9 @@ function render(){
 }
 
 loadState().then(checkForUpdate);
+// إعادة التحقق دوريًا (كل 10 دقائق) وعند عودة التبويب للظهور، حتى لا يحتاج المستخدم لتحديث الصفحة يدويًا ليكتشف نسخة جديدة.
+setInterval(checkForUpdate, 10 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkForUpdate(); });
 </script>
 </body>
 </html>
