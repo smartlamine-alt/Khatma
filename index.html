@@ -633,19 +633,19 @@ function mushafSelectHtml(id, riwaya, current, disabled){
 // exact:true = مُعايَر ومطابق تمامًا لترقيم الجدول أعلاه (604 صفحة، مع offset إن وُجد إزاحة ثابتة). exact:false/غائب = تقريبي (نسبة مساحة) بانتظار معايرته.
 const QURANFLASH_BY_RIWAYA = {
   'حفص عن عاصم': [
-    { code: 'Medina2', label: 'المصحف الوسط (مجمع الملك فهد)', pages: 604, exact: true },
+    { code: 'Medina2', label: 'المصحف الوسط (مجمع الملك فهد)', pages: 604, offset: 2, exact: true }, // مُعايَر: صفحة 151 (الأعراف:1) = chapter 153
     { code: 'Medina1', label: 'مصحف المدينة', pages: 604, offset: 2, exact: true }, // صفحة 1 = chapter 3، آخر صفحة (604) = chapter 606
-    { code: 'Medina3', label: 'المصحف الجوامعي', pages: 604, exact: true },
-    { code: 'MedinaOld', label: 'مصحف المدينة القديم', pages: 604, exact: true },
+    { code: 'Medina3', label: 'المصحف الجوامعي', pages: 604, offset: 2, exact: true }, // نفس عائلة Medina1/2، لم يُختبَر مباشرة
+    { code: 'MedinaOld', label: 'مصحف المدينة القديم', pages: 604, offset: 2, exact: true }, // نفس عائلة Medina1/2، لم يُختبَر مباشرة
     { code: 'Tajweed', label: 'مصحف التجويد (دار المعرفة)', pages: 604, exact: true },
     { code: 'Shamarly', label: 'مصحف الشمرلي', pages: 522 },
     { code: 'NaskhTaleek', label: 'خط نسخ تعليق', pages: 620 },
     { code: 'Tahajod', label: 'مصحف التهجد', pages: 266 }
   ],
-  'شعبة عن عاصم': [ { code: 'Shubah', label: 'رواية شعبة', pages: 604, exact: true } ],
+  'شعبة عن عاصم': [ { code: 'Shubah', label: 'رواية شعبة', pages: 604, offset: 2, exact: true } ], // بافتراض التطابق مع Medina1/2/3/MedinaOld
   'ورش عن نافع': [
     { code: 'Warsh1', label: 'مصحف ورش (مجمع الملك فهد)', pages: 576 },
-    { code: 'Warsh2', label: 'مصحف ورش (طريق الأصبهاني)', pages: 604, exact: true }
+    { code: 'Warsh2', label: 'مصحف ورش (طريق الأصبهاني)', pages: 604, offset: 2, exact: true } // بافتراض التطابق مع Medina1/2/3/MedinaOld
   ],
   'قالون عن نافع': [ { code: 'Qaloon', label: 'مصحف قالون', pages: 576 } ],
   'الدوري عن أبي عمرو': [ { code: 'Douri', label: 'رواية الدوري', pages: 544 } ]
@@ -1433,7 +1433,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.117'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.120'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
