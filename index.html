@@ -190,6 +190,9 @@
   .nav-btn{ display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; height:34px; }
   .nav-btn:not(.aux-nav){ font-family:'Amiri', serif; font-size:19px; font-weight:700; line-height:1; padding:0 12px; border-radius:9px; background:transparent; color:var(--parchment-dim); border:1px solid var(--hairline); }
   .aux-nav{ border-radius:9px; background:transparent; color:var(--parchment-dim); border:1px solid var(--hairline); }
+  .suggestion-btn{ gap:5px; color:var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, var(--hairline)); background: color-mix(in srgb, var(--gold) 10%, transparent); transition: background .15s, color .15s; text-decoration:none; }
+  .suggestion-btn svg{ width:16px; height:16px; }
+  .suggestion-btn:hover{ background: color-mix(in srgb, var(--gold) 20%, transparent); color: var(--parchment); }
   .nav-btn.active{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
   #app > [hidden]{ display:none !important; }
   .tuto-card{ position:fixed; bottom:12px; left:50%; transform:translateX(-50%); z-index:1000; width:min(460px, calc(100% - 24px)); background: color-mix(in srgb, var(--bg-b) 72%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color:var(--parchment); border:1px solid var(--hairline); border-radius:16px; padding:12px 16px 12px; box-shadow:0 10px 32px rgba(0,0,0,.45); }
@@ -963,6 +966,7 @@ function dateTextCompact(iso){
 let state = null;
 let showNewKhatmaForm = false;
 const TRAINING_URL = 'https://www.youtube.com/watch?v=4SgFWJzsbCY&list=PLNxF6yrM2mUQ'; // رابط قائمة تشغيل الدورة (يوتيوب)
+const SUGGESTION_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSc9prK9n0fm41fCszi1nMWfa9ASXQh7o-fgaUYehuBkiw5CKw/viewform?usp=publish-editor';
 let surahPickerState = { min: 0, current: 0 };
 let ledgerViewName = null;
 let showLocalBackupOptions = false;
@@ -1374,7 +1378,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.89'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.94'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2239,6 +2243,7 @@ function render(){
           <h1 class="top-nav"><button type="button" class="nav-btn ${currentView === 'khatma' ? 'active' : ''}" id="navKhatmaBtn">ختمتي</button><button type="button" class="nav-btn ${currentView === 'library' ? 'active' : ''}" id="navLibraryBtn">مكتبتي</button></h1>
           <button type="button" class="nav-btn aux-nav" id="helpBtn" title="دليل تفاعلي" aria-label="دليل تفاعلي">دليل تفاعلي</button>
           <a class="nav-btn yt-btn aux-nav" href="${TRAINING_URL}" target="_blank" rel="noopener noreferrer" title="الدورة التكوينية على يوتيوب"><svg viewBox="0 0 24 24" width="28" height="20" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="4.5" fill="#FF0000"/><path d="M10 8.7v6.6l5.6-3.3z" fill="#fff"/></svg>الدورة التكوينية</a>
+          <a class="nav-btn suggestion-btn" href="${SUGGESTION_FORM_URL}" target="_blank" rel="noopener noreferrer" title="اقتراح / ملاحظة"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.45.9 1.15.9 1.9V16.5h5.2V15.8c0-.75.3-1.45.9-1.9A6 6 0 0 0 12 3z"/></svg>اقتراح</a>
           <span class="version-tag">v${APP_VERSION}</span>
         </div>
         <div class="credit-line">فكرة وتصميم: شرشالي محمد أمين<br>برنامج مجاني غير ربحي</div>
