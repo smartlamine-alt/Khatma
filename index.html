@@ -479,12 +479,15 @@
   .stats-summary .stat .lbl{ font-size: 12px; color: var(--parchment-dim); }
 
   @media (max-width: 420px){
-    /* قائمة الختمات: كل خلية على سطر مستقل بدل الاعتماد على التمرير الأفقي، حتى تظهر أزرار الإجراءات دون الحاجة لتحريك الصفحة */
-    table.khatma-list, table.khatma-list tbody, table.khatma-list tr{ display:block; width:100%; }
+    /* قائمة الختمات: التاريخ والمدة والحالة تبقى في سطر واحد كما هي (بلا تكديس)، وسطر الأزرار وحده ينتقل لسطر جديد عند الحاجة بدل التمرير الأفقي */
+    table.khatma-list, table.khatma-list tbody{ display:block; width:100%; }
     table.khatma-list thead{ display:none; }
-    table.khatma-list tr:not(.khatma-group-row):not(.khatma-edit-row){ border:1px solid var(--hairline); border-radius:8px; padding:6px 8px; margin-bottom:6px; }
-    table.khatma-list td{ display:block; white-space:normal; padding:3px 0; }
-    table.khatma-list td:last-child{ padding-top:6px; display:flex; flex-wrap:wrap; gap:4px; }
+    table.khatma-list tr:not(.khatma-group-row):not(.khatma-edit-row){
+      display:flex; flex-wrap:wrap; align-items:center; column-gap:8px; row-gap:4px;
+      border:1px solid var(--hairline); border-radius:8px; padding:6px 8px; margin-bottom:6px;
+    }
+    table.khatma-list tr:not(.khatma-group-row):not(.khatma-edit-row) td{ display:inline-flex; padding:0; white-space:nowrap; }
+    table.khatma-list tr:not(.khatma-group-row):not(.khatma-edit-row) td:last-child{ flex-basis:100%; flex-wrap:wrap; gap:4px; }
     table.metrics .row-remaining td:not(.row-label){ font-size: 23px; }
     .row{ flex-direction: column; gap: 10px; }
     .hero-row{ flex-direction: row; gap: 8px; }
@@ -1433,7 +1436,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.120'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.121'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
