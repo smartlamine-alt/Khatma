@@ -617,25 +617,26 @@ function madaniPageOf(cumulative){
 function mushafSelectHtml(id, riwaya, current, disabled){
   const books = QURANFLASH_BY_RIWAYA[riwaya] || [];
   if(!books.length) return `<input type="text" id="${id}" value="لا يوجد مصحف متاح لهذه الرواية" disabled>`;
-  const opts = books.map(b => `<option value="${b.code}" ${b.code === current ? 'selected' : ''}>${escHtml(b.label)}</option>`).join('');
+  const opts = books.map(b => `<option value="${b.code}" ${b.code === current ? 'selected' : ''} ${b.exact ? 'style="font-weight:700;"' : ''}>${escHtml(b.label)}</option>`).join('');
   return `<select id="${id}" ${disabled ? 'disabled' : ''}>${opts}</select>`;
 }
 
+// exact:true = مُعايَر ومطابق تمامًا لترقيم الجدول أعلاه (604 صفحة، مع offset إن وُجد إزاحة ثابتة). exact:false/غائب = تقريبي (نسبة مساحة) بانتظار معايرته.
 const QURANFLASH_BY_RIWAYA = {
   'حفص عن عاصم': [
-    { code: 'Medina2', label: 'المصحف الوسط (مجمع الملك فهد)', pages: 624 },
-    { code: 'Medina1', label: 'مصحف المدينة', pages: 624 },
-    { code: 'Medina3', label: 'المصحف الجوامعي', pages: 624 },
-    { code: 'MedinaOld', label: 'مصحف المدينة القديم', pages: 624 },
-    { code: 'Tajweed', label: 'مصحف التجويد (دار المعرفة)', pages: 604 },
+    { code: 'Medina2', label: 'المصحف الوسط (مجمع الملك فهد)', pages: 604, exact: true },
+    { code: 'Medina1', label: 'مصحف المدينة', pages: 604, offset: 2, exact: true }, // صفحة 1 = chapter 3، آخر صفحة (604) = chapter 606
+    { code: 'Medina3', label: 'المصحف الجوامعي', pages: 604, exact: true },
+    { code: 'MedinaOld', label: 'مصحف المدينة القديم', pages: 604, exact: true },
+    { code: 'Tajweed', label: 'مصحف التجويد (دار المعرفة)', pages: 604, exact: true },
     { code: 'Shamarly', label: 'مصحف الشمرلي', pages: 522 },
     { code: 'NaskhTaleek', label: 'خط نسخ تعليق', pages: 620 },
     { code: 'Tahajod', label: 'مصحف التهجد', pages: 266 }
   ],
-  'شعبة عن عاصم': [ { code: 'Shubah', label: 'رواية شعبة', pages: 624 } ],
+  'شعبة عن عاصم': [ { code: 'Shubah', label: 'رواية شعبة', pages: 604, exact: true } ],
   'ورش عن نافع': [
     { code: 'Warsh1', label: 'مصحف ورش (مجمع الملك فهد)', pages: 576 },
-    { code: 'Warsh2', label: 'مصحف ورش (طريق الأصبهاني)', pages: 610 }
+    { code: 'Warsh2', label: 'مصحف ورش (طريق الأصبهاني)', pages: 604, exact: true }
   ],
   'قالون عن نافع': [ { code: 'Qaloon', label: 'مصحف قالون', pages: 576 } ],
   'الدوري عن أبي عمرو': [ { code: 'Douri', label: 'رواية الدوري', pages: 544 } ]
@@ -1423,7 +1424,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.108'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.110'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2367,7 +2368,7 @@ function render(){
         const chosen = books.find(b => b.code === (khatma.mushafBook || state.mushafBook)) || books[0] || null;
         return `<div class="mushaf-line">
           <span>${kRiwaya ? '📿 ' + escHtml(kRiwaya) : 'الرواية غير محدَّدة'}</span>
-          ${books.length ? `<span>—</span><select id="heroMushafSelect">${books.map(b => `<option value="${b.code}" ${chosen && b.code === chosen.code ? 'selected' : ''}>${escHtml(b.label)}</option>`).join('')}</select><button type="button" class="primary" id="browseMushafBtn" data-code="${chosen ? chosen.code : ''}" data-pages="${chosen ? chosen.pages : ''}">تصفح</button>` : (kRiwaya ? `<span>— لا يوجد مصحف متاح حاليًا على Quranflash</span>` : '')}
+          ${books.length ? `<span>—</span><select id="heroMushafSelect">${books.map(b => `<option value="${b.code}" ${chosen && b.code === chosen.code ? 'selected' : ''} ${b.exact ? 'style="font-weight:700;"' : ''}>${escHtml(b.label)}</option>`).join('')}</select><button type="button" class="primary" id="browseMushafBtn" data-code="${chosen ? chosen.code : ''}" data-pages="${chosen ? chosen.pages : ''}" data-offset="${chosen ? (chosen.offset||0) : 0}" title="${chosen && chosen.exact ? 'تصفح موافق للموضع المختار' : 'تصفح مختلف نوعًا عن الموضع المختار'}">تصفح</button>` : (kRiwaya ? `<span>— لا يوجد مصحف متاح حاليًا على Quranflash</span>` : '')}
         </div>`;
       })()}
       <div class="row hero-row">
@@ -2661,7 +2662,7 @@ function render(){
       khatma.mushafBook = e.target.value;
       const book = (QURANFLASH_BY_RIWAYA[khatma.riwaya] || []).find(b => b.code === e.target.value);
       const btn = document.getElementById('browseMushafBtn');
-      if(btn && book){ btn.dataset.code = book.code; btn.dataset.pages = book.pages; }
+      if(btn && book){ btn.dataset.code = book.code; btn.dataset.pages = book.pages; btn.dataset.offset = book.offset||0; btn.title = book.exact ? 'تصفح موافق للموضع المختار' : 'تصفح مختلف نوعًا عن الموضع المختار'; }
       await saveState();
     });
   }
@@ -2673,8 +2674,9 @@ function render(){
       const ayah = Math.max(1, parseInt(normalizeDigits(document.getElementById('ayahInput').value), 10) || 1);
       const cumulative = CUM[surahIdx] + ayah;
       // صفحة مصحف المدينة الحقيقية (604) من الجدول الدقيق، ثم تحويلها نسبيًا لعدد صفحات المصحف المختار إن اختلف (تقريب مؤقت لحين معايرة كل مصحف على حدة).
+      const offset = parseInt(e.currentTarget.dataset.offset, 10) || 0;
       const realPage604 = madaniPageOf(cumulative);
-      const page = pages === 604 ? realPage604 : Math.max(1, Math.round(realPage604 * pages / 604));
+      const page = (pages === 604 ? realPage604 : Math.max(1, Math.round(realPage604 * pages / 604))) + offset;
       window.open(`https://app.quranflash.com/book/${code}?ar#/reader/chapter/${page}`, '_blank', 'noopener');
     });
   }
