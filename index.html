@@ -1433,7 +1433,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.111'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.115'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1610,6 +1610,7 @@ async function loadState(){
 
 async function saveState(){
   if(versionWarning) return; // لا نكتب شيئًا أبدًا فوق ملف بإصدار أحدث.
+  state.lastModified = Date.now(); // طابع زمني لكل حفظ محلي، يُستخدَم للمقارنة مع Drive عند عودة الاتصال (انظر syncDriveOnReconnect).
   try{
     const db = await getDbCapability();
     if(db){
@@ -2537,7 +2538,7 @@ function render(){
             ${supportsFilePicker() ? `<button class="primary" id="linkFileBtn">ربط ملف JSON موجود للحفظ التلقائي</button>` : ''}
             ${supportsFileSystemAccess() ? `<button class="ghost" id="linkFolderBtn2">ربط مجلد بدلًا من ذلك</button>` : ''}
           </div>
-          <div class="note" style="margin-top:8px;">💡 لمزامنة تلقائية بين أجهزتك عبر Google Drive: إن كان لديك تطبيق Google Drive مثبَّتًا على جهازك (Drive for Desktop)، اختر ملفًا أو مجلدًا داخل مجلد Drive نفسه بالزرّين أعلاه — سيُزامَن حفظك تلقائيًا مع كل أجهزتك المرتبطة بنفس حساب Drive، تمامًا كما يحدث على الهاتف.</div>
+          <div class="note" style="margin-top:8px;">💡 لمزامنة تلقائية بين أجهزتك عبر Google Drive: إن كان لديك تطبيق Google Drive مثبَّتًا على جهازك (Drive for Desktop)، اختر ملفًا أو مجلدًا داخل مجلد Drive نفسه بالزرّين أعلاه — سيُزامَن حفظك تلقائيًا مع كل أجهزتك المرتبطة بنفس حساب Drive.<br>⚠ يعمل هذا حتى بلا إنترنت <b>فقط</b> إن كان هذا الملف/المجلد مضبوطًا في إعدادات Drive على «متاح دائمًا/غير متصل» (Available offline / Mirror)، لا «عند الطلب فقط» (Online-only). إن استُخدم الملف نفسه من مجلدين/جهازين مختلفين في آنٍ معًا فقد ينشئ Drive نسخة متعارضة ويستبدل تعديلاتك؛ للحفظ الأكثر أمانًا يُفضَّل تسجيل الدخول المباشر عبر Google أعلاه بدل هذه الطريقة.</div>
         `}
         <div class="note" style="margin-top:12px;">يمكنك أيضًا تنزيل نسخة يدويًا أو استيراد نسخة من جهاز آخر:</div>
         <div class="actions" style="margin-top:8px;">
@@ -3111,6 +3112,68 @@ loadState().then(checkForUpdate);
 // إعادة التحقق دوريًا (كل 10 دقائق) وعند عودة التبويب للظهور، حتى لا يحتاج المستخدم لتحديث الصفحة يدويًا ليكتشف نسخة جديدة.
 setInterval(checkForUpdate, 10 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkForUpdate(); });
+// عند عودة الاتصال بعد انقطاع: نرفع فورًا آخر نسخة محلية إلى Google Drive بدل انتظار أول تعديل جديد،
+// حتى لا تبقى تعديلات فترة الانقطاع محصورة على هذا الجهاز فقط. ملاحظة: هذا يفترض أن هذا الجهاز هو الأحدث؛
+// إن عُدِّلت البيانات من جهاز آخر أثناء الانقطاع فقد يُستبدَل ذلك التعديل بنسخة هذا الجهاز.
+// مفتاح فريد لتسجيل واحد، لاكتشاف التكرار عند دمج تسجيلات من جهازين.
+function entryMergeKey(e){ return e.date + '|' + (e.time || '') + '|' + e.surahIdx + '|' + e.ayah; }
+// مفتاح دورة (لمطابقة نفس الختمة/الدورة بين نسختين): الاسم (أو فهرسها إن كانت بلا اسم) + تاريخ بدايتها.
+function khatmaMergeKey(k, idx){ const d = (k.description || '').trim(); return (d || ('__' + idx)) + '|' + k.startDate; }
+// يدمج دورة واحدة موجودة في كلا الطرفين: اتحاد تسجيلاتها (بلا فقدان أي تسجيل من أي جهاز)، وبقية حقولها من الطرف الأحدث نشاطًا لهذه الدورة تحديدًا.
+function mergeKhatmaObjects(a, b){
+  const seen = new Set(); const entries = [];
+  for(const e of [...a.entries, ...b.entries]){
+    const k = entryMergeKey(e);
+    if(seen.has(k)) continue;
+    seen.add(k); entries.push(e);
+  }
+  entries.sort((x, y) => entryDateTime(x).localeCompare(entryDateTime(y)));
+  const aLast = a.entries.length ? entryDateTime(a.entries[a.entries.length - 1]) : '';
+  const bLast = b.entries.length ? entryDateTime(b.entries[b.entries.length - 1]) : '';
+  const base = aLast >= bLast ? a : b;
+  return { ...base, entries };
+}
+// يدمج نسختين كاملتين من البيانات (محلية وDrive): اتحاد كل الختمات وتسجيلاتها، بلا استبدال كتلي يُفقد تسجيلات جهاز عن آخر.
+function mergeStates(local, remote){
+  if(!remote) return local;
+  if(!local) return remote;
+  const merged = { ...(((local.lastModified || 0) >= (remote.lastModified || 0)) ? local : remote) };
+  const la = local.khatmas || [], ra = remote.khatmas || [];
+  const usedRemote = new Set();
+  const mergedKhatmas = la.map((k, i) => {
+    const key = khatmaMergeKey(k, i);
+    const j = ra.findIndex((rk, ri) => !usedRemote.has(ri) && khatmaMergeKey(rk, ri) === key);
+    if(j >= 0){ usedRemote.add(j); return mergeKhatmaObjects(k, ra[j]); }
+    return k;
+  });
+  ra.forEach((rk, ri) => { if(!usedRemote.has(ri)) mergedKhatmas.push(rk); });
+  merged.khatmas = mergedKhatmas;
+  return merged;
+}
+// عند عودة الاتصال: تُدمَج نسخة هذا الجهاز مع نسخة Drive الفعلية (اتحاد التسجيلات لا استبدالها)،
+// حتى لا تُفقد تسجيلات أُدخلت في هذا الجهاز أثناء الانقطاع إن كان جهاز آخر قد حدَّث Drive في الأثناء.
+async function syncDriveOnReconnect(){
+  if(driveStatus !== 'linked' || !driveFileId || !state || versionWarning) return;
+  try{
+    const res = await driveApiFetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
+    const text = await res.text();
+    const remoteRaw = text && text.trim() ? JSON.parse(text) : null;
+    if(!remoteRaw) return;
+    const migratedRemote = migrateIfNeeded(remoteRaw);
+    if(!migratedRemote) return; // ملف Drive بإصدار أحدث من هذا التطبيق: لا نلمسه.
+    const merged = mergeStates(state, migratedRemote);
+    const changed = JSON.stringify(merged.khatmas) !== JSON.stringify(state.khatmas);
+    if(changed){
+      state = merged;
+      await saveState(); // يحفظ الدمج محليًا وعلى Drive معًا (driveStatus === 'linked')
+      render();
+    } else {
+      // البيانات متطابقة فعليًا: نحدّث الطرفين بنفس الطابع الزمني معًا، حتى لا يبقى أحدهما يظهر «أقدم» من الآخر عند مقارنة لاحقة.
+      await saveState();
+    }
+  }catch(e){ console.error('تعذرت مزامنة Drive عند عودة الاتصال', e); }
+}
+window.addEventListener('online', syncDriveOnReconnect);
 </script>
 </body>
 </html>
