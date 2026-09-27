@@ -175,6 +175,9 @@
   .mushaf-line{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--parchment-dim); margin:-4px 0 10px; flex-wrap:wrap; }
   .mushaf-line button{ padding:2px 12px; font-size:12.5px; }
   .mushaf-line select{ width:auto; font-size:12.5px; padding:3px 6px; }
+  [data-tip]{ position:relative; }
+  [data-tip]::after{ content: attr(data-tip); position:absolute; bottom:calc(100% + 6px); right:50%; transform:translateX(50%) scale(.95); background:#111; color:#fff; font-size:11.5px; padding:4px 8px; border-radius:6px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .05s linear, transform .05s linear; z-index:50; }
+  [data-tip]:hover::after, [data-tip]:focus-visible::after{ opacity:1; transform:translateX(50%) scale(1); }
   .surah-picker-btn{ width:100%; text-align:start; background: var(--panel-2); border: 1px solid var(--hairline); color: var(--parchment); padding: 10px 12px; border-radius: 8px; font-family:'Tajawal', sans-serif; font-size: 15px; cursor:pointer; }
   .surah-picker-btn:disabled{ opacity:.5; cursor:not-allowed; }
   .surah-picker-btn:focus{ outline: 2px solid var(--gold-dim); outline-offset: 1px; }
@@ -476,6 +479,12 @@
   .stats-summary .stat .lbl{ font-size: 12px; color: var(--parchment-dim); }
 
   @media (max-width: 420px){
+    /* قائمة الختمات: كل خلية على سطر مستقل بدل الاعتماد على التمرير الأفقي، حتى تظهر أزرار الإجراءات دون الحاجة لتحريك الصفحة */
+    table.khatma-list, table.khatma-list tbody, table.khatma-list tr{ display:block; width:100%; }
+    table.khatma-list thead{ display:none; }
+    table.khatma-list tr:not(.khatma-group-row):not(.khatma-edit-row){ border:1px solid var(--hairline); border-radius:8px; padding:6px 8px; margin-bottom:6px; }
+    table.khatma-list td{ display:block; white-space:normal; padding:3px 0; }
+    table.khatma-list td:last-child{ padding-top:6px; display:flex; flex-wrap:wrap; gap:4px; }
     table.metrics .row-remaining td:not(.row-label){ font-size: 23px; }
     .row{ flex-direction: column; gap: 10px; }
     .hero-row{ flex-direction: row; gap: 8px; }
@@ -1424,7 +1433,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.110'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.111'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2368,7 +2377,7 @@ function render(){
         const chosen = books.find(b => b.code === (khatma.mushafBook || state.mushafBook)) || books[0] || null;
         return `<div class="mushaf-line">
           <span>${kRiwaya ? '📿 ' + escHtml(kRiwaya) : 'الرواية غير محدَّدة'}</span>
-          ${books.length ? `<span>—</span><select id="heroMushafSelect">${books.map(b => `<option value="${b.code}" ${chosen && b.code === chosen.code ? 'selected' : ''} ${b.exact ? 'style="font-weight:700;"' : ''}>${escHtml(b.label)}</option>`).join('')}</select><button type="button" class="primary" id="browseMushafBtn" data-code="${chosen ? chosen.code : ''}" data-pages="${chosen ? chosen.pages : ''}" data-offset="${chosen ? (chosen.offset||0) : 0}" title="${chosen && chosen.exact ? 'تصفح موافق للموضع المختار' : 'تصفح مختلف نوعًا عن الموضع المختار'}">تصفح</button>` : (kRiwaya ? `<span>— لا يوجد مصحف متاح حاليًا على Quranflash</span>` : '')}
+          ${books.length ? `<span>—</span><select id="heroMushafSelect">${books.map(b => `<option value="${b.code}" ${chosen && b.code === chosen.code ? 'selected' : ''} ${b.exact ? 'style="font-weight:700;"' : ''}>${escHtml(b.label)}</option>`).join('')}</select><button type="button" class="primary" id="browseMushafBtn" data-code="${chosen ? chosen.code : ''}" data-pages="${chosen ? chosen.pages : ''}" data-offset="${chosen ? (chosen.offset||0) : 0}" data-tip="${chosen && chosen.exact ? 'تصفح موافق للموضع المختار' : 'تصفح مختلف نوعًا عن الموضع المختار'}">تصفح</button>` : (kRiwaya ? `<span>— لا يوجد مصحف متاح حاليًا على Quranflash</span>` : '')}
         </div>`;
       })()}
       <div class="row hero-row">
@@ -2662,7 +2671,7 @@ function render(){
       khatma.mushafBook = e.target.value;
       const book = (QURANFLASH_BY_RIWAYA[khatma.riwaya] || []).find(b => b.code === e.target.value);
       const btn = document.getElementById('browseMushafBtn');
-      if(btn && book){ btn.dataset.code = book.code; btn.dataset.pages = book.pages; btn.dataset.offset = book.offset||0; btn.title = book.exact ? 'تصفح موافق للموضع المختار' : 'تصفح مختلف نوعًا عن الموضع المختار'; }
+      if(btn && book){ btn.dataset.code = book.code; btn.dataset.pages = book.pages; btn.dataset.offset = book.offset||0; btn.dataset.tip = book.exact ? 'تصفح موافق للموضع المختار' : 'تصفح مختلف نوعًا عن الموضع المختار'; }
       await saveState();
     });
   }
