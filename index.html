@@ -172,6 +172,9 @@
   select, option{ direction: rtl; text-align: right; }
   .local-backup-row{ display:flex; align-items:center; gap:8px; margin:16px 0; }
   .local-backup-row span{ font-size:13px; color:var(--parchment-dim); }
+  .mushaf-line{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--parchment-dim); margin:-4px 0 10px; flex-wrap:wrap; }
+  .mushaf-line button{ padding:2px 12px; font-size:12.5px; }
+  .mushaf-line select{ width:auto; font-size:12.5px; padding:3px 6px; }
   .surah-picker-btn{ width:100%; text-align:start; background: var(--panel-2); border: 1px solid var(--hairline); color: var(--parchment); padding: 10px 12px; border-radius: 8px; font-family:'Tajawal', sans-serif; font-size: 15px; cursor:pointer; }
   .surah-picker-btn:disabled{ opacity:.5; cursor:not-allowed; }
   .surah-picker-btn:focus{ outline: 2px solid var(--gold-dim); outline-offset: 1px; }
@@ -596,6 +599,48 @@ const CUM = [];
 { let acc=0; for(const [,c] of SURAHS){ CUM.push(acc); acc+=c; } }
 const APPROX_PAGES = 604;
 
+// موضع بداية كل صفحة من صفحات مصحف المدينة (مجمع الملك فهد، 604 صفحة) بالآية التراكمية (1..6236).
+// المصدر: QUL – Mushaf Al Madinah V1 (1405H print) – https://qul.tarteel.ai/mushaf_layouts/2
+const MADANI_PAGE_STARTS = [1,8,13,24,32,37,45,56,65,69,77,84,91,96,101,109,113,120,127,134,142,149,153,161,171,177,184,189,194,198,204,210,218,223,227,232,238,241,245,253,256,260,264,267,272,277,282,289,290,294,303,309,316,323,331,339,346,355,364,371,377,385,394,402,409,415,426,434,442,447,451,459,467,474,480,488,494,500,505,508,513,517,520,527,531,538,545,553,559,568,573,580,585,588,595,599,607,615,621,628,634,641,648,656,664,669,672,675,679,683,687,693,701,706,711,715,720,727,734,740,746,752,759,765,773,778,783,790,798,808,817,825,834,842,849,858,863,871,880,884,891,900,908,914,921,927,932,936,941,947,955,966,977,985,992,998,1006,1012,1022,1028,1036,1042,1050,1059,1075,1085,1092,1098,1104,1110,1114,1118,1125,1133,1142,1150,1161,1169,1177,1186,1194,1201,1206,1213,1222,1230,1236,1242,1249,1256,1262,1267,1272,1276,1283,1290,1297,1304,1308,1315,1322,1329,1335,1342,1347,1353,1358,1365,1371,1379,1385,1390,1398,1407,1418,1426,1435,1443,1453,1462,1471,1479,1486,1493,1502,1511,1519,1527,1536,1545,1555,1562,1571,1582,1591,1601,1611,1619,1627,1634,1640,1649,1660,1666,1675,1683,1692,1700,1708,1713,1721,1726,1736,1742,1750,1756,1761,1769,1775,1784,1793,1803,1818,1834,1854,1873,1893,1908,1916,1928,1936,1944,1956,1966,1974,1981,1989,1995,2004,2012,2020,2030,2037,2047,2057,2068,2079,2088,2096,2105,2116,2126,2134,2145,2156,2161,2168,2175,2186,2194,2202,2215,2224,2238,2251,2262,2276,2289,2302,2315,2327,2346,2361,2386,2400,2413,2425,2436,2447,2462,2474,2484,2494,2508,2519,2528,2541,2556,2565,2574,2585,2596,2601,2611,2619,2626,2634,2642,2651,2660,2668,2674,2691,2701,2716,2733,2748,2763,2778,2792,2802,2812,2819,2823,2828,2835,2845,2850,2853,2858,2867,2876,2888,2899,2911,2923,2933,2952,2972,2993,3016,3044,3069,3092,3116,3139,3160,3173,3182,3195,3204,3215,3223,3236,3248,3258,3266,3274,3281,3288,3296,3303,3312,3323,3330,3337,3347,3355,3364,3371,3379,3386,3393,3404,3415,3425,3434,3442,3451,3460,3470,3481,3489,3498,3504,3515,3524,3534,3540,3549,3556,3564,3569,3577,3584,3588,3596,3607,3614,3621,3629,3638,3646,3655,3664,3672,3679,3691,3699,3705,3718,3733,3746,3760,3776,3789,3813,3840,3865,3891,3915,3942,3971,3987,3997,4013,4032,4054,4064,4069,4080,4090,4099,4106,4115,4126,4133,4141,4150,4159,4167,4174,4183,4192,4200,4211,4219,4230,4239,4248,4257,4265,4273,4283,4288,4295,4304,4317,4324,4336,4348,4359,4373,4386,4399,4415,4433,4454,4474,4487,4496,4506,4516,4525,4531,4539,4546,4557,4565,4575,4584,4593,4599,4607,4612,4617,4624,4631,4646,4666,4682,4706,4727,4750,4767,4785,4811,4829,4853,4874,4896,4918,4942,4969,4996,5030,5056,5079,5087,5094,5100,5105,5111,5116,5126,5130,5136,5143,5151,5156,5162,5169,5178,5186,5193,5200,5209,5218,5223,5230,5237,5242,5254,5268,5287,5314,5332,5358,5386,5415,5430,5448,5461,5476,5495,5513,5543,5571,5597,5617,5642,5673,5703,5728,5759,5801,5830,5855,5883,5910,5932,5964,5994,6017,6044,6073,6099,6126,6138,6156,6177,6194,6208,6222];
+// يُرجع رقم صفحة المصحف المدني (1-604) التي تقع فيها آية تراكمية معيّنة (1..6236)، بحث ثنائي على الجدول أعلاه.
+function madaniPageOf(cumulative){
+  let lo = 0, hi = MADANI_PAGE_STARTS.length - 1;
+  while(lo < hi){
+    const mid = (lo + hi + 1) >> 1;
+    if(MADANI_PAGE_STARTS[mid] <= cumulative) lo = mid; else hi = mid - 1;
+  }
+  return lo + 1;
+}
+
+// المصاحف المتاحة على quranflash.com، مصنّفة حسب الرواية (لاستخدامها لاحقًا عند إضافة رابط فتح المصحف).
+// روايات كثيرة ليس لها مصحف مطبوع على الموقع بعد؛ تبقى فارغة إلى أن تُوجد بدائل لها.
+function mushafSelectHtml(id, riwaya, current, disabled){
+  const books = QURANFLASH_BY_RIWAYA[riwaya] || [];
+  if(!books.length) return `<input type="text" id="${id}" value="لا يوجد مصحف متاح لهذه الرواية" disabled>`;
+  const opts = books.map(b => `<option value="${b.code}" ${b.code === current ? 'selected' : ''}>${escHtml(b.label)}</option>`).join('');
+  return `<select id="${id}" ${disabled ? 'disabled' : ''}>${opts}</select>`;
+}
+
+const QURANFLASH_BY_RIWAYA = {
+  'حفص عن عاصم': [
+    { code: 'Medina2', label: 'المصحف الوسط (مجمع الملك فهد)', pages: 624 },
+    { code: 'Medina1', label: 'مصحف المدينة', pages: 624 },
+    { code: 'Medina3', label: 'المصحف الجوامعي', pages: 624 },
+    { code: 'MedinaOld', label: 'مصحف المدينة القديم', pages: 624 },
+    { code: 'Tajweed', label: 'مصحف التجويد (دار المعرفة)', pages: 604 },
+    { code: 'Shamarly', label: 'مصحف الشمرلي', pages: 522 },
+    { code: 'NaskhTaleek', label: 'خط نسخ تعليق', pages: 620 },
+    { code: 'Tahajod', label: 'مصحف التهجد', pages: 266 }
+  ],
+  'شعبة عن عاصم': [ { code: 'Shubah', label: 'رواية شعبة', pages: 624 } ],
+  'ورش عن نافع': [
+    { code: 'Warsh1', label: 'مصحف ورش (مجمع الملك فهد)', pages: 576 },
+    { code: 'Warsh2', label: 'مصحف ورش (طريق الأصبهاني)', pages: 610 }
+  ],
+  'قالون عن نافع': [ { code: 'Qaloon', label: 'مصحف قالون', pages: 576 } ],
+  'الدوري عن أبي عمرو': [ { code: 'Douri', label: 'رواية الدوري', pages: 544 } ]
+};
+
 const JUZ_STARTS = [
   [1,1],[2,142],[2,253],[3,92],[4,24],[4,148],[5,82],[6,111],[7,88],[8,41],
   [9,93],[11,6],[12,53],[15,1],[17,1],[18,75],[21,1],[23,1],[25,21],[27,56],
@@ -1004,8 +1049,8 @@ async function getDbCapability(){
   return null;
 }
 
-function blankKhatma(startDate, durationDays, description, riwaya){
-  return { startDate, durationDays, description: description || '', riwaya: riwaya || '', status: 'ongoing', archived: false, entries: [] };
+function blankKhatma(startDate, durationDays, description, riwaya, mushafBook){
+  return { startDate, durationDays, description: description || '', riwaya: riwaya || '', mushafBook: mushafBook || '', status: 'ongoing', archived: false, entries: [] };
 }
 function escHtml(t){
   return String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1378,7 +1423,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.96'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.108'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2028,6 +2073,10 @@ function render(){
             <label for="editKhatmaRiwaya_${i}">الرواية</label>
             ${lockRest ? riwayaSelectHtml('editKhatmaRiwaya_'+i, k.riwaya || '').replace('<select', '<select disabled') : riwayaSelectHtml('editKhatmaRiwaya_'+i, k.riwaya || '')}
           </div>
+          <div class="field${lockRest ? ' field-locked' : ''}">
+            <label for="editKhatmaMushaf_${i}">المصحف (Quranflash)</label>
+            ${mushafSelectHtml('editKhatmaMushaf_'+i, k.riwaya || '', k.mushafBook || '', lockRest)}
+          </div>
         </div>
         <div class="row">
           <div class="field${lockRest ? ' field-locked' : ''}">
@@ -2281,6 +2330,21 @@ function render(){
             </select>
           </div>
         </div>
+        <div class="settings-row">
+          <div class="settings-field">
+            <span class="k">الرواية الافتراضية (للمصحف)</span>
+            ${riwayaSelectHtml('defaultRiwayaSelect', state.defaultRiwaya || '')}
+          </div>
+          <div class="settings-field">
+            <span class="k">المصحف الافتراضي (Quranflash)</span>
+            ${(() => {
+              const books = QURANFLASH_BY_RIWAYA[state.defaultRiwaya] || [];
+              if(!books.length) return `<select disabled><option>لا يوجد مصحف متاح حاليًا لهذه الرواية على Quranflash</option></select>`;
+              if(books.length === 1) return `<input type="text" value="${escHtml(books[0].label)}" disabled>`;
+              return `<select id="defaultMushafSelect">${books.map(b => `<option value="${b.code}" ${state.mushafBook === b.code ? 'selected' : ''}>${escHtml(b.label)}</option>`).join('')}</select>`;
+            })()}
+          </div>
+        </div>
       </section>
     </div>
 
@@ -2297,6 +2361,15 @@ function render(){
         <div class="hero-status">${heroStatus}</div>
         ${khatmaGroups.length > 1 ? `<select id="khatmaViewSelect" class="hero-khatma-select" dir="rtl">${khatmaViewOptions}</select>` : ''}
       </div>
+      ${(() => {
+        const kRiwaya = khatma.riwaya || '';
+        const books = QURANFLASH_BY_RIWAYA[kRiwaya] || [];
+        const chosen = books.find(b => b.code === (khatma.mushafBook || state.mushafBook)) || books[0] || null;
+        return `<div class="mushaf-line">
+          <span>${kRiwaya ? '📿 ' + escHtml(kRiwaya) : 'الرواية غير محدَّدة'}</span>
+          ${books.length ? `<span>—</span><select id="heroMushafSelect">${books.map(b => `<option value="${b.code}" ${chosen && b.code === chosen.code ? 'selected' : ''}>${escHtml(b.label)}</option>`).join('')}</select><button type="button" class="primary" id="browseMushafBtn" data-code="${chosen ? chosen.code : ''}" data-pages="${chosen ? chosen.pages : ''}">تصفح</button>` : (kRiwaya ? `<span>— لا يوجد مصحف متاح حاليًا على Quranflash</span>` : '')}
+        </div>`;
+      })()}
       <div class="row hero-row">
         <div class="field">
           <label for="surahPickerBtn">السورة</label>
@@ -2349,7 +2422,11 @@ function render(){
             </div>
             <div class="field">
               <label for="newRiwayaInput">الرواية</label>
-              ${riwayaSelectHtml('newRiwayaInput', newKhatmaPrefill ? newKhatmaPrefill.riwaya : (khatma.riwaya || ''))}
+              ${riwayaSelectHtml('newRiwayaInput', newKhatmaPrefill ? newKhatmaPrefill.riwaya : (khatma.riwaya || state.defaultRiwaya || ''))}
+            </div>
+            <div class="field">
+              <label for="newMushafInput">المصحف (Quranflash)</label>
+              ${mushafSelectHtml('newMushafInput', newKhatmaPrefill ? newKhatmaPrefill.riwaya : (khatma.riwaya || state.defaultRiwaya || ''), newKhatmaPrefill ? newKhatmaPrefill.mushafBook : (khatma.mushafBook || state.mushafBook || ''))}
             </div>
           </div>
           <div class="note" ${newKhatmaPrefill && newKhatmaPrefill.quick ? 'style="display:none;"' : ''}>${emptySetupKhatma ? 'لا توجد تسجيلات بعد: أدخل بيانات الختمة قبل أول تسجيل.' : 'سيتم حفظ الختمة الحالية في السجل وبدء ختمة جديدة بهذه البيانات.'}</div>
@@ -2544,6 +2621,22 @@ function render(){
     if(showKhatmaList) scrollToggleToTop('khatmaListToggleBtn');
   });
 
+  if(document.getElementById('defaultRiwayaSelect')){
+    document.getElementById('defaultRiwayaSelect').addEventListener('change', async (e) => {
+      state.defaultRiwaya = e.target.value;
+      const books = QURANFLASH_BY_RIWAYA[state.defaultRiwaya] || [];
+      state.mushafBook = books.length === 1 ? books[0].code : (books.length ? '' : '');
+      await saveState();
+      render();
+    });
+  }
+  if(document.getElementById('defaultMushafSelect')){
+    document.getElementById('defaultMushafSelect').addEventListener('change', async (e) => {
+      state.mushafBook = e.target.value;
+      await saveState();
+    });
+  }
+
   document.getElementById('settingsToggleBtn').addEventListener('click', ()=>{
     showSettings = !showSettings;
     render();
@@ -2557,6 +2650,34 @@ function render(){
   });
 
   document.getElementById('surahSel').value = selectedSurah;
+  if(document.getElementById('newRiwayaInput')){
+    document.getElementById('newRiwayaInput').addEventListener('change', (e) => {
+      const field = document.getElementById('newMushafInput');
+      if(field) field.outerHTML = mushafSelectHtml('newMushafInput', e.target.value, '');
+    });
+  }
+  if(document.getElementById('heroMushafSelect')){
+    document.getElementById('heroMushafSelect').addEventListener('change', async (e) => {
+      khatma.mushafBook = e.target.value;
+      const book = (QURANFLASH_BY_RIWAYA[khatma.riwaya] || []).find(b => b.code === e.target.value);
+      const btn = document.getElementById('browseMushafBtn');
+      if(btn && book){ btn.dataset.code = book.code; btn.dataset.pages = book.pages; }
+      await saveState();
+    });
+  }
+  if(document.getElementById('browseMushafBtn')){
+    document.getElementById('browseMushafBtn').addEventListener('click', (e) => {
+      const code = e.currentTarget.dataset.code;
+      const pages = parseInt(e.currentTarget.dataset.pages, 10) || APPROX_PAGES;
+      const surahIdx = parseInt(document.getElementById('surahSel').value, 10);
+      const ayah = Math.max(1, parseInt(normalizeDigits(document.getElementById('ayahInput').value), 10) || 1);
+      const cumulative = CUM[surahIdx] + ayah;
+      // صفحة مصحف المدينة الحقيقية (604) من الجدول الدقيق، ثم تحويلها نسبيًا لعدد صفحات المصحف المختار إن اختلف (تقريب مؤقت لحين معايرة كل مصحف على حدة).
+      const realPage604 = madaniPageOf(cumulative);
+      const page = pages === 604 ? realPage604 : Math.max(1, Math.round(realPage604 * pages / 604));
+      window.open(`https://app.quranflash.com/book/${code}?ar#/reader/chapter/${page}`, '_blank', 'noopener');
+    });
+  }
   if(document.getElementById('surahPickerBtn')){
     document.getElementById('surahPickerBtn').addEventListener('click', (e) => { e.stopPropagation(); openSurahPickerPanel(e.currentTarget); });
   }
@@ -2599,13 +2720,15 @@ function render(){
       if(isNaN(newDur) || newDur < 0) newDur = 0;
       const newDesc = document.getElementById('newDescInput').value.trim();
       const newRiwaya = document.getElementById('newRiwayaInput').value.trim();
+      const newMushafEl = document.getElementById('newMushafInput');
+      const newMushaf = (newMushafEl && newMushafEl.tagName === 'SELECT') ? newMushafEl.value : '';
       const inPlace = emptySetupKhatma;
       if(inPlace){
-        Object.assign(inPlace, { startDate: newStart, durationDays: newDur, description: newDesc, riwaya: newRiwaya });
+        Object.assign(inPlace, { startDate: newStart, durationDays: newDur, description: newDesc, riwaya: newRiwaya, mushafBook: newMushaf });
         firstSetupDone = true;
         emptySetupKhatma = null;
       } else {
-        state.khatmas.push(blankKhatma(newStart, newDur, newDesc, newRiwaya));
+        state.khatmas.push(blankKhatma(newStart, newDur, newDesc, newRiwaya, newMushaf));
         selectedKhatmaIdx = null;
       }
       showNewKhatmaForm = false;
@@ -2647,12 +2770,21 @@ function render(){
       render();
     });
   });
+  document.querySelectorAll('[id^="editKhatmaRiwaya_"]').forEach(sel=>{
+    sel.addEventListener('change', (e) => {
+      const idx = e.target.id.replace('editKhatmaRiwaya_', '');
+      const field = document.getElementById('editKhatmaMushaf_' + idx);
+      if(field) field.outerHTML = mushafSelectHtml('editKhatmaMushaf_' + idx, e.target.value, '');
+    });
+  });
   document.querySelectorAll('.edit-khatma-save').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const i = parseInt(btn.dataset.idx, 10);
       const k = state.khatmas[i];
       const newDesc = document.getElementById('editKhatmaDesc_'+i).value.trim();
       const newRiwaya = document.getElementById('editKhatmaRiwaya_'+i).value.trim();
+      const editMushafEl = document.getElementById('editKhatmaMushaf_'+i);
+      const newMushaf = (editMushafEl && editMushafEl.tagName === 'SELECT') ? editMushafEl.value : '';
       const newStart = state.calendarPref === 'hijri'
         ? readHijriSingleIso('editKhatmaStart_'+i)
         : (document.getElementById('editKhatmaStart_'+i).value || k.startDate);
@@ -2663,6 +2795,7 @@ function render(){
       sameGroup.forEach(x => { x.description = newDesc || oldName; });
       if(!nameOnlyEdit(k)){
         k.riwaya = newRiwaya;
+        k.mushafBook = newMushaf;
         k.startDate = newStart;
         k.durationDays = newDur;
       }
