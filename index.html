@@ -1433,7 +1433,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.115'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.117'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -1744,7 +1744,7 @@ function renderVersionBlock(){
           <h1>ختمتي</h1>
           <span class="version-tag">v${APP_VERSION}</span>
         </div>
-        <div class="credit-line">فكرة وتصميم: شرشالي محمد أمين<br>برنامج مجاني غير ربحي</div>
+        <div class="credit-line">فكرة وتصميم: ش.محمد أمين<br>برنامج مجاني غير ربحي</div>
       </div>
     </header>
     <section class="status-banner status-behind" style="text-align:start;">
@@ -2180,7 +2180,8 @@ function render(){
         const hizbPerDayE = vk.durationDays > 0 ? 60/vk.durationDays : 0;
         const idealHizbE = Math.min(hizbPerDayE*dIdx, 60);
         const dHizb = eHizb - idealHizbE;
-        const cls = statusClass(hizbPerDayE > 0 ? dHizb/hizbPerDayE : 0);
+        // نفس معيار «تسجيل الموضع الحالي» تمامًا: أي فرق يُقرَّب إلى حزب فأكثر يُعدّ تقدّمًا أو تأخرًا، لا نسبة من يوم.
+        const cls = Math.round(Math.abs(dHizb)) === 0 ? 'onpace' : (dHizb > 0 ? 'ahead' : 'behind');
         const label = cls==='ahead' ? 'متقدم' : (cls==='behind' ? 'متأخر' : 'في الموعد');
         const ePages = e.cumulative * APPROX_PAGES / TOTAL_AYAT;
         const eJuz = unitPosition(JUZ_BOUNDARIES, e.cumulative);
@@ -2290,8 +2291,8 @@ function render(){
     if(st.overdue) parts.push(`<span class="overdue-note">${overdueLabel(st.dayIndex - st.duration)}</span>`);
     const pace = paceHizbLabel(st.hizbDiff);
     parts.push(pace
-      ? `<span class="${st.hizbDiff>0?'ahead-note':'overdue-note'}">${pace}</span> <span class="hero-rate">(المقدار اليومي: ${fmt1(60/st.duration)} حزب/يوم)</span>`
-      : `<span class="hero-rate">في الموعد (المقدار اليومي: ${fmt1(60/st.duration)} حزب/يوم)</span>`);
+      ? `<span class="${st.hizbDiff>0?'ahead-note':'overdue-note'}">${pace}</span>`
+      : `<span class="hero-rate">في الموعد</span>`);
     return parts.join(' - ');
   })();
 
@@ -2306,7 +2307,7 @@ function render(){
           <a class="nav-btn suggestion-btn" href="${SUGGESTION_FORM_URL}" target="_blank" rel="noopener noreferrer" title="اقتراح / ملاحظة"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.45.9 1.15.9 1.9V16.5h5.2V15.8c0-.75.3-1.45.9-1.9A6 6 0 0 0 12 3z"/></svg>اقتراح</a>
           <span class="version-tag">v${APP_VERSION}</span>
         </div>
-        <div class="credit-line">فكرة وتصميم: شرشالي محمد أمين<br>برنامج مجاني غير ربحي</div>
+        <div class="credit-line">فكرة وتصميم: ش.محمد أمين<br>برنامج مجاني غير ربحي</div>
       </div>
       <div class="sub">${showKhatmaData && completedCount>0 ? `<span class="completed-badge">✓ أتممت ${nd(completedCount)} ${completedCount===1?'ختمة':'ختمات'}</span>`:''}</div>
     </header>
@@ -2377,7 +2378,7 @@ function render(){
         const books = QURANFLASH_BY_RIWAYA[kRiwaya] || [];
         const chosen = books.find(b => b.code === (khatma.mushafBook || state.mushafBook)) || books[0] || null;
         return `<div class="mushaf-line">
-          <span>${kRiwaya ? '📿 ' + escHtml(kRiwaya) : 'الرواية غير محدَّدة'}</span>
+          <span>${kRiwaya ? escHtml(kRiwaya) : 'الرواية غير محدَّدة'}</span>
           ${books.length ? `<span>—</span><select id="heroMushafSelect">${books.map(b => `<option value="${b.code}" ${chosen && b.code === chosen.code ? 'selected' : ''} ${b.exact ? 'style="font-weight:700;"' : ''}>${escHtml(b.label)}</option>`).join('')}</select><button type="button" class="primary" id="browseMushafBtn" data-code="${chosen ? chosen.code : ''}" data-pages="${chosen ? chosen.pages : ''}" data-offset="${chosen ? (chosen.offset||0) : 0}" data-tip="${chosen && chosen.exact ? 'تصفح موافق للموضع المختار' : 'تصفح مختلف نوعًا عن الموضع المختار'}">تصفح</button>` : (kRiwaya ? `<span>— لا يوجد مصحف متاح حاليًا على Quranflash</span>` : '')}
         </div>`;
       })()}
