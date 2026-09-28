@@ -1436,7 +1436,7 @@ async function unlinkFile(){
 }
 
 const APP_DATA_VERSION = 2; // كل تغيير في بنية البيانات يرفع هذا الرقم، مع خطوة ترقية أدناه.
-const APP_VERSION = '2.121'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
+const APP_VERSION = '2.122'; // رقم إصدار التطبيق نفسه (الميزات/الواجهة)، يرتفع مع كل تحديث — راجع سجل التغييرات.
 let versionWarning = null; // { fileVersion } عند العثور على ملف بإصدار أحدث مما يدعمه هذا HTML
 
 function migrateIfNeeded(raw){
@@ -2113,7 +2113,7 @@ function render(){
 
     if(k.archived){
       return `<tr class="archived-row">
-        <td><span class="round-dates">${dateTextCompact(k.startDate)} → ${dateTextCompact(kEnd)}</span>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}</td>
+        <td><span class="round-dates">${dateTextCompact(k.startDate)} ← ${dateTextCompact(kEnd)}</span>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}</td>
         <td>${nd(k.durationDays)} يوم</td>
         <td>${statusHtml}</td>
         <td>
@@ -2124,7 +2124,7 @@ function render(){
     }
 
     return `<tr>
-      <td><span class="round-dates">${dateTextCompact(k.startDate)} → ${dateTextCompact(kEnd)}</span>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}</td>
+      <td><span class="round-dates">${dateTextCompact(k.startDate)} ← ${dateTextCompact(kEnd)}</span>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}</td>
       <td>${nd(k.durationDays)} يوم</td>
       <td>${statusHtml}</td>
       <td>
@@ -2242,7 +2242,7 @@ function render(){
         ? `<span class="tag done">اكتملت خلال ${nd(days)} يوم</span>`
         : `<span class="tag pending">${fmt(progress)} / ${fmt(TOTAL_AYAT)}</span>`;
       return `<tr>
-        <td><b>${escHtml(khatmaName(k))}</b>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}<span class="sub-date">${nd(k.startDate)} → ${nd(endDate)}</span></td>
+        <td><b>${escHtml(khatmaName(k))}</b>${k.riwaya ? ' <span class="sub-date" style="display:inline;">(' + escHtml(k.riwaya) + ')</span>' : ''}<span class="sub-date">${nd(k.startDate)} ← ${nd(endDate)}</span></td>
         <td>${nd(k.durationDays)} يوم</td>
         <td>${statusHtml}</td>
       </tr>`;
